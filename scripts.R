@@ -15,17 +15,15 @@ pooling.cor <- function(cor.matrices, D = 116) {
 cor.asd.pooled <- pooling.cor(cor.asd)
 cor.td.pooled <- pooling.cor(cor.td)
 
-# combined correlations from both groups
+# # threshold (80th percentile) of the combined correlations of both groups
 cor.all <- c(unlist(cor.asd.pooled), unlist(cor.td.pooled))
-
-# threshold (80th percentile)
 threshold <- as.numeric(quantile(cor.all, probs = 0.8))
 
 # test for empty intersection of [-t,t] with CI(j,k)
 # TRUE iff H_0 is rejected
 int.test <- function(lower, upper, t) (t < lower) | (-t > upper)
 
-build.assoc.graph <- function(cor.matrices.a, cor.matrices.b, threshold, D = 116, n = 145, m = 12) {
+build.assoc.graph <- function(cor.matrices.a, cor.matrices.b, threshold, D = 116, m = 12) {
   # D : features, n: time series length, m: patients
   adj.matrix <- matrix(nrow = D, ncol = D)
   
@@ -40,17 +38,16 @@ build.assoc.graph <- function(cor.matrices.a, cor.matrices.b, threshold, D = 116
       p1 <- as.numeric(unlist(lapply(cor.matrices.a, function(x) x[j, k])))
       p2 <- as.numeric(unlist(lapply(cor.matrices.b, function(x) x[j, k])))
       p <- abs(p1 - p2)
-      print(p)
-      
+
       # Fisher CI for each patient corrleation coefficient
-      conf.int <- lapply(p, function(x) CorCI(x, n = n, conf.level = alpha))
+      conf.int <- lapply(p, function(x) CorCI(x, n = m, conf.level = alpha))
     
       # conf.int[i] = (rho, lower, upper)
       # bool vector of CI intersection test with threshold interval
       int.test.results <- unlist(lapply(conf.int, function(x) int.test(x[2], x[3], threshold)))
       
       # edge (j,k) iff at least one H_0 is rejected
-      adj.matrix[j,k] <- as.numeric(any(int.test.results))
+      adj.matrix[j,k] <- as.numeric(any(int.test.results, na.rm = T))
     }
   }
   return(adj.matrix)
