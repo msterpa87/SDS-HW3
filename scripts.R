@@ -2,18 +2,10 @@ library(DescTools)
 library(igraph)
 library(matrixStats)
 
-build_graph = function(A, B, probs = 0.8, adjust = TRUE) {
+build_graph = function(A_flat, B_flat, probs = 0.8, adjust = TRUE) {
   # Bonferroni adjusted confidence level
   if(adjust) alpha = 1 - 0.05 / 12
   else alpha = 1 - 0.05
-  
-  # correlation matrices
-  A = lapply(A, function(x) cor(x, method = "pearson"))
-  B = lapply(B, function(x) cor(x, method = "pearson"))
-  
-  # flatted correlation matrices
-  A_flat = t(sapply(A, unlist))
-  B_flat = t(sapply(B, unlist))
   
   # thresholds
   t_a = quantile(A_flat, probs = probs, names = F)
@@ -45,28 +37,32 @@ plot_graph = function(M, title) {
   plot(G, main = title)
 }
 
+plot_comparison_graphs = function(G_bonferroni, G_raw) {
+  # Plotting graphs
+  par(mfrow = c(2,2))
+  plot_graph(G_bonferroni$A, "Group A (Bonferroni)")
+  plot_graph(G_bonferroni$B, "Group B (Bonferroni)")
+  plot_graph(G_raw$A, "Group A (non-adjusted)")
+  plot_graph(G_raw$B, "Group B (non-adjusted)")
+}
 
 # test for empty intersection of [-t,t] with CI(j,k)
 # TRUE iff H_0 is rejected
 int.test <- function(lower, upper, t) (t < lower) | (-t > upper)
 
+# correlation matrices
+A = lapply(asd_sel, function(x) cor(x, method = "pearson"))
+B = lapply(td_sel, function(x) cor(x, method = "pearson"))
+
+# flatted correlation matrices
+A_flat = t(sapply(A, unlist))
+B_flat = t(sapply(B, unlist))
+
 # building adjacency matrix for ASD group
 G_bonferroni = build_graph(asd_sel, td_sel)
 G_raw = build_graph(asd_sel, td_sel, adjust = F)
 
-# node degree histogram in difference graph
-par(mfrow = c(1,2))
-hist(rowSums(G_diff_bonferroni), col = "orchid", border = "white",
-     main = "Bonferroni adjusted", xlab = "Node degree")
-hist(rowSums(G_diff_raw), col = "pink", border = "white",
-     main = "Non adjusted", xlab = "Node degree")
-
-# Plotting graphs
-par(mfrow = c(2,2))
-plot_graph(G_bonferroni$A, "Group A (Bonferroni)")
-plot_graph(G_bonferroni$B, "Group B (Bonferroni)")
-plot_graph(G_raw$A, "Group A (non-adjusted)")
-plot_graph(G_raw$B, "Group B (non-adjusted)")
+plot_comparison_graphs(G_bonferroni, G_raw)
 
 # histograms of co-activation with sliding threshold
 probs = seq(0.5, 1, 0.05)
@@ -96,25 +92,35 @@ grid()
 
 # Bootstrap
 b = 10
-diff_graph_list = list()
-t_boot = 0
+A_flat_boot = matrix(0, nrow = 12, ncol = 116^2)
+B_flat_boot = matrix(0, nrow = 12, ncol = 116^2)
 
 for(i in 1:b) {
   # resample of each group
-  sample_a = sample(asd_sel, 12, replace = T)
-  sample_b = sample(td_sel, 12, replace = T)
+  A = sample(asd_sel, 12, replace = T)
+  B = sample(td_sel, 12, replace = T)
   
   # correlation matrix for asd and td groups
-  grouped_sample_a = lapply(sample_a, function(x) cor(x, method = "pearson"))
-  grouped_sample_b = lapply(sample_b, function(x) cor(x, method = "pearson"))
+  A = lapply(sample_a, function(x) cor(x, method = "pearson"))
+  B = lapply(sample_b, function(x) cor(x, method = "pearson"))
   
-  # pooling taking the median
-  pooled_a = pooling.cor(grouped_sample_a)
-  pooled_b = pooling.cor(grouped_sample_b)
-  t_boot = t_boot + quantile(c(pooled_a, pooled_b), probs = 0.8, names = F)
+  # flatted correlation matrices
+  A_flat = t(sapply(A, unlist))
+  B_flat = t(sapply(B, unlist))
   
-  diff_graph_list[[i]] = abs(pooled_a - pooled_b)
+  # average correlation per group
+  A_flat_boot = A_flat_boot + A_flat
+  B_flat_boot = B_flat_boot + B_flat
 }
+
+A_flat_boot = A_flat_boot / b
+B_flat_boot = B_flat_boot / b
+
+# building adjacency matrix for ASD group
+G_bonferroni_boot = build_graph(A_flat_boot, B_flat_boot)
+G_raw_boot = build_graph(A_flat_boot, B_flat_boot, adjust = F)
+
+plot_comparison_graphs(G_bonferroni_boot, G_raw_boot)
 
 # Normal 95% confidence interval for features correlations
 flattened_features = matrix(unlist(diff_graph_list, recursive = TRUE), nrow = b)
