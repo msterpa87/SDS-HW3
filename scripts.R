@@ -31,8 +31,7 @@ threshold <- as.numeric(quantile(cor.all, probs = 0.8))
 # TRUE iff H_0 is rejected
 int.test <- function(lower, upper, t) (t < lower) | (-t > upper)
 
-build.assoc.graph <- function(cor.matrices.a, cor.matrices.b, threshold, D = 116, m = 12,
-                              bonferroni = TRUE) {
+build.assoc.graph <- function(A, B, t, D = 116, m = 12, adjust = TRUE) {
   # D : features, n: time series length, m: patients
   adj.matrix <- matrix(nrow = D, ncol = D)
   
@@ -44,7 +43,7 @@ build.assoc.graph <- function(cor.matrices.a, cor.matrices.b, threshold, D = 116
   for(j in 1:D) {
     for(k in 1:D) {
       
-      # vector of pearson correlation of features (j,k) for each patient
+      # vector of Pearson correlation of features (j,k) for each patient
       p1 <- as.numeric(unlist(lapply(cor.matrices.a, function(x) x[j, k])))
       p2 <- as.numeric(unlist(lapply(cor.matrices.b, function(x) x[j, k])))
       p <- abs(p1 - p2)
@@ -96,6 +95,7 @@ grid()
 # Bootstrap
 b = 10
 diff_graph_list = list()
+t_boot = 0
 
 for(i in 1:b) {
   # resample of each group
@@ -109,11 +109,16 @@ for(i in 1:b) {
   # pooling taking the median
   pooled_a = pooling.cor(grouped_sample_a)
   pooled_b = pooling.cor(grouped_sample_b)
+  t_boot = t_boot + quantile(c(pooled_a, pooled_b), probs = 0.8, names = F)
   
   diff_graph_list[[i]] = abs(pooled_a - pooled_b)
 }
 
+# Normal 95% confidence interval for features correlations
+flattened_features = matrix(unlist(diff_graph_list, recursive = TRUE), nrow = b)
+t_boot = t_boot / b
 means = colMeans(flattened_features)
 deviations = colSds(flattened_features)
+z = qnorm(1-0.05/12)
 lower = matrix(means - z * deviations, nrow = 116, ncol = 116)
 upper = matrix(means + z * deviations, nrow = 116, ncol = 116)
