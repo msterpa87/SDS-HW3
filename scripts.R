@@ -1,6 +1,7 @@
 library(DescTools)
 library(igraph)
 library(matrixStats)
+load("C:/Users/Stefania/Desktop/Sapienza/I SEMESTRE_20-21/STATISTICAL METHODS IN DATA SCIENCE AND LABORATORY I/HW3/hw3_data.RData")
 
 build_graph = function(A_flat, B_flat, probs = 0.8, adjust = TRUE) {
   # Bonferroni adjusted confidence level
@@ -34,7 +35,8 @@ plot_graph = function(M, title) {
   V(G)$size <- 1
   V(G)$label <- ""
   E(G)$arrow.mode <- 0
-  plot(G, main = title)
+  plot(G, main = title, vertex.color="indianred3", vertex.size=5, vertex.frame.color="ivory1", 
+       vertex.label.cex=0.8, vertex.label.dist=5, edge.curved=0.2)
 }
 
 plot_comparison_graphs = function(G_bonferroni, G_raw) {
@@ -59,8 +61,8 @@ A_flat = t(sapply(A, unlist))
 B_flat = t(sapply(B, unlist))
 
 # building adjacency matrix for ASD group
-G_bonferroni = build_graph(asd_sel, td_sel)
-G_raw = build_graph(asd_sel, td_sel, adjust = F)
+G_bonferroni = build_graph(A_flat, B_flat)
+G_raw = build_graph(A_flat, B_flat, adjust = F)
 
 plot_comparison_graphs(G_bonferroni, G_raw)
 
@@ -71,8 +73,8 @@ n_coact_bonf = rep(NA, n)
 n_coact_raw = rep(NA, n)
 
 for(i in 1:n) {
-  G_bonf = build_graph(asd_sel, td_sel, probs = probs[i], adjust = T)
-  G_raw = build_graph(asd_sel, td_sel, probs = probs[i], adjust = F)
+  G_bonf = build_graph(A_flat, B_flat, probs = probs[i], adjust = T)
+  G_raw = build_graph(A_flat, B_flat, probs = probs[i], adjust = F)
   
   # number of paired co-activation between groups
   n_coact_bonf[i] = sum((G_bonf$A == 1) & (G_bonf$B == 1)) - 116
@@ -80,14 +82,14 @@ for(i in 1:n) {
 }
 
 par(mfrow = c(1,1))
-plot(x = probs, y = n_coact_bonf, type = "b", col = "red", pch = 16, xlab = "Threshold",
-     ylab = "Number of Paired Co-Activations", ylim = range(n_coact_raw),
+plot(x = probs, y = n_coact_bonf, type = "b", col = "seagreen3", pch = 16, xlab = "Threshold",
+     ylab = "Number of Paired Co-Activations", ylim = range(n_coact_raw), lwd = 2,
      main = "Co-activation at different thresholds")
-lines(x = probs, y = n_coact_raw, type = "b", col = "blue", pch = 16, add = TRUE)
-segments(.5, n_coact[7], 1, n_coact[7], lwd = 2, lty = 2, col = "green")
-text(.8, n_coact[7] - 150, bquote(q[80]))
+lines(x = probs, y = n_coact_raw, type = "b", col = "indianred3", pch = 16, lwd = 2,add = TRUE)
+segments(.5, n_coact_bonf[7], 1, n_coact_bonf[7], lwd = 2, lty = 2, col = "lightcyan4")
+text(.8, n_coact_bonf[7] - 150, bquote(q[80]),lwd = 2)
 legend("topright", legend=c("Bonferroni", "Non-Adjusted"),
-       col=c("red", "blue"), lty=1, lwd=3)
+       col=c("seagreen3", "indianred3"), lty=1, lwd=3)
 grid()
 
 # Bootstrap
