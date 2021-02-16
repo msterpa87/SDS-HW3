@@ -139,22 +139,27 @@ delta_matrices = t(sapply(t_diff, adj_matrix))
 to_matrix = function(M_flat) matrix(M_flat, nrow=116, byrow=T)
 titles = unlist(lapply(t_diff, function(t) paste(c("t =", round(t,2)), collapse = " ")))
 
-plot_degree = function(M, title, color) {
-  G = graph_from_adjacency_matrix(M)
-  deg = degree(G, mode="all")
-  deg.dist = degree.distribution(G, cumulative=T, mode="all")
-  plot(x=0:max(deg), y=1-deg.dist, pch=19, type="l", col=color,
-       xlab="Degree", ylab="Cumulative frequency", main=title,
-       lwd=2)
-  grid()
-}
-
 plot_degree_distributions = function(flat_matrices, titles) {
-  par(mfrow = c(2,2), mai=c(.3,.3,.3,.3))
-  colors = c("pink", "orange", "blue", "orchid")
-  invisible(sapply(1:4, function(i) plot_degree(to_matrix(flat_matrices[i,]),
-                                                titles[i], colors[i])))
+  colors = c("deeppink", "deepskyblue", "gold2", "orchid")
+  for(i in 1:4) {
+    M = to_matrix(flat_matrices[i,])
+    G = graph_from_adjacency_matrix(M)
+    deg = degree(G, mode="all")
+    deg.dist = degree.distribution(G, cumulative=T, mode="all")
+    if(i == 1) {
+      plot(x=0:max(deg), y=1-deg.dist, pch=19, type="l", col=colors[i],
+           xlab="Degree", ylab="Cumulative frequency",
+           main="Degree distribution at different thresholds" , lwd=2)
+    }
+    else {
+      lines(x=0:max(deg), y=1-deg.dist,
+            col=colors[i], lwd=2)
+    }
+  }
+  grid()
+  legend("bottomright", legend=titles, col=colors, lty=1, lwd=2)
 }
 
+par(mfrow=c(1,1))
 plot_degree_distributions(delta_matrices, titles)
 
