@@ -32,8 +32,9 @@ build_graph = function(A_flat, B_flat, probs = 0.8, adjust = TRUE) {
 
 plot_graph = function(M, title) {
   G <- simplify(graph_from_adjacency_matrix(M), remove.loops = T)
-  V(G)$size <- 1
+  V(G)$size <- .5
   V(G)$label <- ""
+  E(G)$width = 0.01
   E(G)$arrow.mode <- 0
   plot(G, main = title, vertex.color="indianred3", vertex.size=5, vertex.frame.color="ivory1", 
        vertex.label.cex=0.8, vertex.label.dist=5, edge.curved=0.2)
@@ -41,7 +42,7 @@ plot_graph = function(M, title) {
 
 plot_comparison_graphs = function(G_bonferroni, G_raw) {
   # Plotting graphs
-  par(mfrow = c(2,2))
+  par(mfrow = c(2,2), mai=c(.1,.1,.2,.1))
   plot_graph(G_bonferroni$A, "Group A (Bonferroni)")
   plot_graph(G_bonferroni$B, "Group B (Bonferroni)")
   plot_graph(G_raw$A, "Group A (non-adjusted)")
@@ -124,11 +125,13 @@ G_raw_boot = build_graph(A_flat_boot, B_flat_boot, adjust = F)
 
 plot_comparison_graphs(G_bonferroni_boot, G_raw_boot)
 
-# Normal 95% confidence interval for features correlations
-flattened_features = matrix(unlist(diff_graph_list, recursive = TRUE), nrow = b)
-t_boot = t_boot / b
-means = colMeans(flattened_features)
-deviations = colSds(flattened_features)
-z = qnorm(1-0.05/12)
-lower = matrix(means - z * deviations, nrow = 116, ncol = 116)
-upper = matrix(means + z * deviations, nrow = 116, ncol = 116)
+# Difference graph
+A_means = colMeans(A_flat_boot)
+B_means = colMeans(B_flat_boot)
+G_delta = abs(A_means - B_means)
+
+# Plot of differences at different thresholds
+t_range = quantile(G_delta, probs = c(0.85, 0.95))
+t_diff = seq(t_range[1], t_range[2], length.out = 4)
+adj_matrix = function(t) as.integer(G_delta >= t)
+delta_matrices = t(sapply(t_diff, adj_matrix))
