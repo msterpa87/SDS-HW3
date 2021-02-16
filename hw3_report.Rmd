@@ -46,14 +46,11 @@ build_graph = function(A_flat, B_flat, probs = 0.8, adjust = TRUE) {
   return(list(A = A_matrix, B = B_matrix))
 }
 
-# test for empty intersection of [-t,t] with CI(j,k)
-# TRUE if H_0 is rejected
-int.test = function(lower, upper, t) (t < lower) | (-t > upper)
-
 plot_graph = function(M, title) {
   G <- simplify(graph_from_adjacency_matrix(M), remove.loops = T)
-  V(G)$size <- 1
+  V(G)$size <- .5
   V(G)$label <- ""
+  E(G)$width = 0.01
   E(G)$arrow.mode <- 0
   plot(G, main = title, vertex.color="indianred3", vertex.size=5, vertex.frame.color="ivory1", 
        vertex.label.cex=0.8, vertex.label.dist=5, edge.curved=0.2)
@@ -61,12 +58,16 @@ plot_graph = function(M, title) {
 
 plot_comparison_graphs = function(G_bonferroni, G_raw) {
   # Plotting graphs
-  par(mfrow = c(2,2))
+  par(mfrow = c(2,2), mai=c(.1,.1,.2,.1))
   plot_graph(G_bonferroni$A, "Group A (Bonferroni)")
   plot_graph(G_bonferroni$B, "Group B (Bonferroni)")
   plot_graph(G_raw$A, "Group A (non-adjusted)")
   plot_graph(G_raw$B, "Group B (non-adjusted)")
 }
+
+# test for empty intersection of [-t,t] with CI(j,k)
+# TRUE iff H_0 is rejected
+int.test <- function(lower, upper, t) (t < lower) | (-t > upper)
 ```
 
 ## Define che correlation matrices 
@@ -129,15 +130,14 @@ grid()
 
 ## Non-parametric bootstrap
 ```{r boot, warning=FALSE}
-# Bootstrap
-b = 10
+b = 100
 A_flat_boot = matrix(0, nrow = 12, ncol = 116^2)
 B_flat_boot = matrix(0, nrow = 12, ncol = 116^2)
 
 for(i in 1:b) {
   # resample of each group
-  A = sample(asd_sel, 12, replace = T)
-  B = sample(td_sel, 12, replace = T)
+  sample_a = sample(asd_sel, 12, replace = T)
+  sample_b = sample(td_sel, 12, replace = T)
   
   # correlation matrix for asd and td groups
   A = lapply(sample_a, function(x) cor(x, method = "pearson"))
@@ -151,25 +151,59 @@ for(i in 1:b) {
   A_flat_boot = A_flat_boot + A_flat
   B_flat_boot = B_flat_boot + B_flat
 }
-
-A_flat_boot = A_flat_boot / b
-B_flat_boot = B_flat_boot / b
 ```
 
 ## Build Bootstrap Confidence Interval 
 ```{r boot_CI, warning=FALSE}
+A_flat_boot = A_flat_boot / b
+B_flat_boot = B_flat_boot / b
+
 # building adjacency matrix for ASD group
 G_bonferroni_boot = build_graph(A_flat_boot, B_flat_boot)
 G_raw_boot = build_graph(A_flat_boot, B_flat_boot, adjust = F)
 
 plot_comparison_graphs(G_bonferroni_boot, G_raw_boot)
 
-# Normal 95% confidence interval for features correlations
-flattened_features = matrix(unlist(diff_graph_list, recursive = TRUE), nrow = b)
-t_boot = t_boot / b
-means = colMeans(flattened_features)
-deviations = colSds(flattened_features)
-z = qnorm(1-0.05/12)
-lower = matrix(means - z * deviations, nrow = 116, ncol = 116)
-upper = matrix(means + z * deviations, nrow = 116, ncol = 116)
+# Difference graph
+A_means = colMeans(A_flat_boot)
+B_means = colMeans(B_flat_boot)
+G_delta = abs(A_means - B_means)
+
+# Plot of differences at different thresholds
+t_range = quantile(G_delta, probs = c(0.85, 0.95))
+t_diff = seq(t_range[1], t_range[2], length.out = 4)
+adj_matrix = function(t) as.integer(G_delta >= t)
+delta_matrices = t(sapply(t_diff, adj_matrix))
+to_matrix = function(M_flat) matrix(M_flat, nrow=116, byrow=T)
+titles = unlist(lapply(t_diff, function(t) paste(c("t =", round(t,2)), collapse = " ")))
+```
+
+
+## Plot
+```{r boot_plot, warning=FALSE}
+plot_degree_distributions = function(flat_matrices, titles) {
+  colors = c("deeppink", "deepskyblue", "gold2", "orchid")
+  for(i in 1:4) {
+    M = to_matrix(flat_matrices[i,])
+    G = graph_from_adjacency_matrix(M)
+    deg = degree(G, mode="all")
+    deg.dist = degree.distribution(G, cumulative=T, mode="all")
+    if(i == 1) {
+      plot(x=0:max(deg), y=1-deg.dist, pch=19, type="l", col=colors[i],
+           xlab="Degree", ylab="Cumulative frequency",
+           main="Degree distribution at different thresholds" , lwd=2)
+    }
+    else {
+      lines(x=0:max(deg), y=1-deg.dist,
+            col=colors[i], lwd=2)
+    }
+  }
+  grid()
+  legend("bottomright", legend=titles, col=colors, lty=1, lwd=2)
+}
+```
+
+```{r plot, echo=FALSE}
+par(mfrow=c(1,1))
+plot_degree_distributions(delta_matrices, titles)
 ```
