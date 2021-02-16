@@ -14,7 +14,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(DescTools)
 library(igraph)
 library(matrixStats)
-load("C:/Users/Stefania/Desktop/Sapienza/I SEMESTRE_20-21/STATISTICAL METHODS IN DATA SCIENCE AND LABORATORY I/HW3/hw3_data.RData")
+load("E:/DATA SCIENCE/STATISTICAL METHODS IN DATA SCIENCE/SDS-HW3/hw3_data.RData")
 ```
 
 ## Build the graphs & Intersection test
@@ -46,23 +46,36 @@ build_graph = function(A_flat, B_flat, probs = 0.8, adjust = TRUE) {
   return(list(A = A_matrix, B = B_matrix))
 }
 
-plot_graph = function(M, title) {
-  G <- simplify(graph_from_adjacency_matrix(M), remove.loops = T)
+set_graph_params = function(G) {
   V(G)$size <- .5
   V(G)$label <- ""
   E(G)$width = 0.01
   E(G)$arrow.mode <- 0
-  plot(G, main = title, vertex.color="indianred3", vertex.size=5, vertex.frame.color="ivory1", 
-       vertex.label.cex=0.8, vertex.label.dist=5, edge.curved=0.2)
+  return(G)
 }
 
-plot_comparison_graphs = function(G_bonferroni, G_raw) {
+plot_graph = function(M, title, community=F) {
+  G = simplify(graph_from_adjacency_matrix(M, mode="undirected"), remove.loops = T)
+  G = set_graph_params(G)
+  params = list(G, main = title, vertex.color="indianred3", vertex.size=5, vertex.frame.color="ivory1", 
+                vertex.label.cex=0.8, vertex.label.dist=5, edge.curved=0.2)
+  
+  # Plot with community detection
+  if(community) {
+    cfg = cluster_fast_greedy(G)
+    params = append(list(cfg), params)
+  }
+  do.call(plot, params)
+}
+
+plot_comparison_graphs = function(G_bonferroni, G_raw, community=F) {
   # Plotting graphs
   par(mfrow = c(2,2), mai=c(.1,.1,.2,.1))
-  plot_graph(G_bonferroni$A, "Group A (Bonferroni)")
-  plot_graph(G_bonferroni$B, "Group B (Bonferroni)")
-  plot_graph(G_raw$A, "Group A (non-adjusted)")
-  plot_graph(G_raw$B, "Group B (non-adjusted)")
+  graph_list = list(G_bonferroni$A, G_bonferroni$B, G_raw$A, G_raw$B)
+  title_list = c("Group A (Bonferroni)", "Group B (Bonferroni)",
+                 "Group A (non-adjusted)", "Group B (non-adjusted)")
+  invisible(sapply(1:4, function(i) plot_graph(graph_list[[i]], title_list[[i]],
+                                               community=community)))
 }
 
 # test for empty intersection of [-t,t] with CI(j,k)
@@ -88,6 +101,7 @@ G_raw = build_graph(A_flat, B_flat, adjust = F)
 ## Visualize the estimated graphs with and without Bonferroni correction
 ```{r graphs, echo=FALSE, warning=FALSE}
 plot_comparison_graphs(G_bonferroni, G_raw)
+plot_comparison_graphs(G_bonferroni, G_raw, community = T)
 ```
 
 ## Co-activation between groups
@@ -111,11 +125,11 @@ for(i in 1:n) {
 
 ## Visualize the co-activation at different thresholds
 ```{r graph, echo=FALSE}
-par(mfrow = c(1,1))
+par(mfrow = c(1,1), mai=c(.5,.5,.5,.5))
 plot(x = probs, y = n_coact_bonf, type = "b", col = "seagreen3", pch = 16, xlab = "Threshold",
      ylab = "Number of Paired Co-Activations", ylim = range(n_coact_raw), lwd = 2,
      main = "Co-activation at different thresholds")
-lines(x = probs, y = n_coact_raw, type = "b", col = "indianred3", pch = 16, lwd = 2,add = TRUE)
+lines(x = probs, y = n_coact_raw, type = "b", col = "indianred3", pch = 16, lwd = 2)
 segments(.5, n_coact_bonf[7], 1, n_coact_bonf[7], lwd = 2, lty = 2, col = "lightcyan4")
 text(.8, n_coact_bonf[7] - 150, bquote(q[80]),lwd = 2)
 legend("topright", legend=c("Bonferroni", "Non-Adjusted"),
@@ -163,7 +177,13 @@ G_bonferroni_boot = build_graph(A_flat_boot, B_flat_boot)
 G_raw_boot = build_graph(A_flat_boot, B_flat_boot, adjust = F)
 
 plot_comparison_graphs(G_bonferroni_boot, G_raw_boot)
+```
+```{r echo=FALSE, message=FALSE}
+plot_comparison_graphs(G_bonferroni_boot, G_raw_boot, community=T)
+```
 
+
+```{r}
 # Difference graph
 A_means = colMeans(A_flat_boot)
 B_means = colMeans(B_flat_boot)

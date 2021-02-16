@@ -59,7 +59,7 @@ plot_comparison_graphs = function(G_bonferroni, G_raw, community=F) {
   graph_list = list(G_bonferroni$A, G_bonferroni$B, G_raw$A, G_raw$B)
   title_list = c("Group A (Bonferroni)", "Group B (Bonferroni)",
                  "Group A (non-adjusted)", "Group B (non-adjusted)")
-  invisible(sapply(1:4, function(i) plot_graph(graph_list[i], title_list[i],
+  invisible(sapply(1:4, function(i) plot_graph(graph_list[[i]], title_list[[i]],
                                                community=community)))
 }
 
@@ -79,7 +79,7 @@ B_flat = t(sapply(B, unlist))
 G_bonferroni = build_graph(A_flat, B_flat)
 G_raw = build_graph(A_flat, B_flat, adjust = F)
 
-plot_comparison_graphs(G_bonferroni, G_raw, community=T)
+plot_comparison_graphs(G_bonferroni, G_raw)
 
 # histograms of co-activation with sliding threshold
 probs = seq(0.5, 1, 0.05)
@@ -96,11 +96,11 @@ for(i in 1:n) {
   n_coact_raw[i] = sum((G_raw$A == 1) & (G_raw$B == 1)) - 116
 }
 
-par(mfrow = c(1,1))
+par(mfrow = c(1,1), mai=c(.5,.5,.5,.5))
 plot(x = probs, y = n_coact_bonf, type = "b", col = "seagreen3", pch = 16, xlab = "Threshold",
      ylab = "Number of Paired Co-Activations", ylim = range(n_coact_raw), lwd = 2,
      main = "Co-activation at different thresholds")
-lines(x = probs, y = n_coact_raw, type = "b", col = "indianred3", pch = 16, lwd = 2,add = TRUE)
+lines(x = probs, y = n_coact_raw, type = "b", col = "indianred3", pch = 16, lwd = 2)
 segments(.5, n_coact_bonf[7], 1, n_coact_bonf[7], lwd = 2, lty = 2, col = "lightcyan4")
 text(.8, n_coact_bonf[7] - 150, bquote(q[80]),lwd = 2)
 legend("topright", legend=c("Bonferroni", "Non-Adjusted"),
