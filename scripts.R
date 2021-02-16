@@ -1,6 +1,7 @@
 library(DescTools)
 library(igraph)
 library(matrixStats)
+
 load("C:/Users/Stefania/Desktop/Sapienza/I SEMESTRE_20-21/STATISTICAL METHODS IN DATA SCIENCE AND LABORATORY I/HW3/hw3_data.RData")
 
 build_graph = function(A_flat, B_flat, probs = 0.8, adjust = TRUE) {
@@ -135,3 +136,25 @@ t_range = quantile(G_delta, probs = c(0.85, 0.95))
 t_diff = seq(t_range[1], t_range[2], length.out = 4)
 adj_matrix = function(t) as.integer(G_delta >= t)
 delta_matrices = t(sapply(t_diff, adj_matrix))
+to_matrix = function(M_flat) matrix(M_flat, nrow=116, byrow=T)
+titles = unlist(lapply(t_diff, function(t) paste(c("t =", round(t,2)), collapse = " ")))
+
+plot_degree = function(M, title, color) {
+  G = graph_from_adjacency_matrix(M)
+  deg = degree(G, mode="all")
+  deg.dist = degree.distribution(G, cumulative=T, mode="all")
+  plot(x=0:max(deg), y=1-deg.dist, pch=19, type="l", col=color,
+       xlab="Degree", ylab="Cumulative frequency", main=title,
+       lwd=2)
+  grid()
+}
+
+plot_degree_distributions = function(flat_matrices, titles) {
+  par(mfrow = c(2,2), mai=c(.3,.3,.3,.3))
+  colors = c("pink", "orange", "blue", "orchid")
+  invisible(sapply(1:4, function(i) plot_degree(to_matrix(flat_matrices[i,]),
+                                                titles[i], colors[i])))
+}
+
+plot_degree_distributions(delta_matrices, titles)
+
