@@ -31,23 +31,36 @@ build_graph = function(A_flat, B_flat, probs = 0.8, adjust = TRUE) {
   return(list(A = A_matrix, B = B_matrix))
 }
 
-plot_graph = function(M, title) {
-  G <- simplify(graph_from_adjacency_matrix(M), remove.loops = T)
+set_graph_params = function(G) {
   V(G)$size <- .5
   V(G)$label <- ""
   E(G)$width = 0.01
   E(G)$arrow.mode <- 0
-  plot(G, main = title, vertex.color="indianred3", vertex.size=5, vertex.frame.color="ivory1", 
-       vertex.label.cex=0.8, vertex.label.dist=5, edge.curved=0.2)
+  return(G)
 }
 
-plot_comparison_graphs = function(G_bonferroni, G_raw) {
+plot_graph = function(M, title, community=F) {
+  G = simplify(graph_from_adjacency_matrix(M, mode="undirected"), remove.loops = T)
+  G = set_graph_params(G)
+  params = list(G, main = title, vertex.color="indianred3", vertex.size=5, vertex.frame.color="ivory1", 
+                vertex.label.cex=0.8, vertex.label.dist=5, edge.curved=0.2)
+  
+  # Plot with community detection
+  if(community) {
+    cfg = cluster_fast_greedy(G)
+    params = append(list(cfg), params)
+  }
+  do.call(plot, params)
+}
+
+plot_comparison_graphs = function(G_bonferroni, G_raw, community=F) {
   # Plotting graphs
   par(mfrow = c(2,2), mai=c(.1,.1,.2,.1))
-  plot_graph(G_bonferroni$A, "Group A (Bonferroni)")
-  plot_graph(G_bonferroni$B, "Group B (Bonferroni)")
-  plot_graph(G_raw$A, "Group A (non-adjusted)")
-  plot_graph(G_raw$B, "Group B (non-adjusted)")
+  graph_list = list(G_bonferroni$A, G_bonferroni$B, G_raw$A, G_raw$B)
+  title_list = c("Group A (Bonferroni)", "Group B (Bonferroni)",
+                 "Group A (non-adjusted)", "Group B (non-adjusted)")
+  invisible(sapply(1:4, function(i) plot_graph(graph_list[i], title_list[i],
+                                               community=community)))
 }
 
 # test for empty intersection of [-t,t] with CI(j,k)
@@ -66,7 +79,7 @@ B_flat = t(sapply(B, unlist))
 G_bonferroni = build_graph(A_flat, B_flat)
 G_raw = build_graph(A_flat, B_flat, adjust = F)
 
-plot_comparison_graphs(G_bonferroni, G_raw)
+plot_comparison_graphs(G_bonferroni, G_raw, community=T)
 
 # histograms of co-activation with sliding threshold
 probs = seq(0.5, 1, 0.05)
@@ -95,7 +108,7 @@ legend("topright", legend=c("Bonferroni", "Non-Adjusted"),
 grid()
 
 # Bootstrap
-b = 10
+b = 100
 A_flat_boot = matrix(0, nrow = 12, ncol = 116^2)
 B_flat_boot = matrix(0, nrow = 12, ncol = 116^2)
 
@@ -143,7 +156,7 @@ plot_degree_distributions = function(flat_matrices, titles) {
   colors = c("deeppink", "deepskyblue", "gold2", "orchid")
   for(i in 1:4) {
     M = to_matrix(flat_matrices[i,])
-    G = graph_from_adjacency_matrix(M)
+    G = graph_from_adjacency_matrix(M, mode="undirected")
     deg = degree(G, mode="all")
     deg.dist = degree.distribution(G, cumulative=T, mode="all")
     if(i == 1) {
@@ -160,6 +173,6 @@ plot_degree_distributions = function(flat_matrices, titles) {
   legend("bottomright", legend=titles, col=colors, lty=1, lwd=2)
 }
 
-par(mfrow=c(1,1))
+par(mfrow=c(1,1), mai=c(.5,.5,.5,.5))
 plot_degree_distributions(delta_matrices, titles)
 
