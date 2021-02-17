@@ -5,7 +5,7 @@ library(matrixStats)
 load("C:/Users/Stefania/Desktop/Sapienza/I SEMESTRE_20-21/STATISTICAL METHODS IN DATA SCIENCE AND LABORATORY I/HW3/hw3_data.RData")
 
 average_cor = function(M) FisherZInv(colMeans(FisherZ(M)))
-to_matrix = function(M_flat) matrix(M_flat, nrow=116, byrow=T)
+to_matrix = function(M_flat) matrix(as.integer(M_flat), nrow=116, byrow=T)
 
 build_graph = function(A_flat, B_flat, probs = 0.8, adjust = TRUE) {
   # Bonferroni adjusted confidence level
@@ -117,30 +117,29 @@ grid()
 #               BOOTSTRAP             #
 #######################################
 
-b = 1000
-
-A_flat = do.call(rbind, asd_sel)
-B_flat = do.call(rbind, td_sel)
+b = 100
 
 # point estimate correlation
-mu_cor_a = cor(A_flat, method="pearson")
-mu_cor_b = cor(B_flat, method="pearson")
+mu_cor_a = average_cor(A_flat)
+mu_cor_b = average_cor(B_flat)
+
+t_a = quantile(mu_cor_a, probs = .8, na.rm = T)
+t_b = quantile(mu_cor_b, probs = .8, na.rm = T)
 
 A_boot = matrix(NA, nrow = b, ncol = 116^2)
 B_boot = matrix(NA, nrow = b, ncol = 116^2)
 
-n = 145*12
+n = 12
 
 for(i in 1:b) {
-  # re-sample of each group
   idx_a = sample(1:n, n, replace = T)
   idx_b = sample(1:n, n, replace = T)
   
-  A_star = A_flat[idx_a,]
-  B_star = B_flat[idx_b,]
+  sample_a = A_flat[idx_a,]
+  sample_b = B_flat[idx_b,]
   
-  A_boot[i,] = unlist(cor(A_star, method = "pearson"), use.names = F)
-  B_boot[i,] = unlist(cor(B_star, method = "pearson"), use.names = F)
+  A_boot[i,] = average_cor(sample_a)
+  B_boot[i,] = average_cor(sample_b)
 }
 
 d = 116
@@ -153,27 +152,18 @@ se_boot_b = apply(B_boot, MARGIN = 2, sd)
 
 lower_a = mu_cor_a - z * se_boot_a
 upper_a = mu_cor_a + z * se_boot_a
-t_a = quantile(mu_cor_a, probs = .9)
 
 lower_b = mu_cor_b - z * se_boot_b
 upper_b = mu_cor_b + z * se_boot_b
-t_b = quantile(mu_cor_b, probs = .9)
 
 # percentile interval
-lower_a = apply(A_boot, MARGIN = 2, FUN = function(x) quantile(x, probs=0.05/m))
-upper_a = apply(A_boot, MARGIN = 2, FUN = function(x) quantile(x, probs=1-0.05/m))
-
-M_a = sapply(1:116^2, function(i) int.test(lower_a[i], upper_a[i], t_a))
-M_a = to_matrix(as.integer(M_a))
-M_b = sapply(1:116^2, function(i) int.test(lower_b[i], upper_b[i], t_b))
-M_b = to_matrix(as.integer(M_b))
-
-D = M_a != M_b
+M_a = to_matrix(sapply(1:116^2, function(i) int.test(lower_a[i], upper_a[i], t_a)))
+M_b = to_matrix(sapply(1:116^2, function(i) int.test(lower_b[i], upper_b[i], t_b)))
 
 par(mfrow=c(2,2), mai=c(.1,.1,.2,.1))
-plot_graph(D, title = "Group A")
+plot_graph(M_a, title = "Group A")
 plot_graph(M_b, title = "Group B")
-plot_graph(D, title = "", community = T)
+plot_graph(M_a, title = "", community = T)
 plot_graph(M_b, title = "", community = T)
 
 # Difference graph
