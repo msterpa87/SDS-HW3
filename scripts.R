@@ -6,7 +6,9 @@ load("C:/Users/Stefania/Desktop/Sapienza/I SEMESTRE_20-21/STATISTICAL METHODS IN
 
 build_graph = function(A_flat, B_flat, probs = 0.8, adjust = TRUE) {
   # Bonferroni adjusted confidence level
-  if(adjust) alpha = 1 - 0.05 / 12
+  d = 116
+  m = d*(d-1)/2
+  if(adjust) alpha = 1 - 0.05 / m
   else alpha = 1 - 0.05
   
   # thresholds
@@ -108,36 +110,55 @@ legend("topright", legend=c("Bonferroni", "Non-Adjusted"),
 grid()
 
 # Bootstrap
-b = 100
-A_flat_boot = matrix(0, nrow = 12, ncol = 116^2)
-B_flat_boot = matrix(0, nrow = 12, ncol = 116^2)
+B = 100
 
-for(i in 1:b) {
-  # resample of each group
-  A = sample(asd_sel, 12, replace = T)
-  B = sample(td_sel, 12, replace = T)
+# point estimate correlation
+mu_cor_a = colMeans(A_flat)
+mu_cor_b = colMeans(B_flat)
+
+A_flat_boot = matrix(NA, nrow = b, ncol = 116^2)
+B_flat_boot = matrix(NA, nrow = b, ncol = 116^2)
+asd_cor = lapply(asd_sel, function(x) cor(x, method = "pearson"))
+td_cor = lapply(td_sel, function(x) cor(x, method = "pearson"))
+
+t_a = rep(NA, B)
+t_b = rep(NA, B)
+
+for(i in 1:B) {
+  # re-sample of each group
+  A = sample(asd_cor, 12, replace = T)
+  B = sample(td_cor, 12, replace = T)
   
-  # correlation matrix for asd and td groups
-  A = lapply(sample_a, function(x) cor(x, method = "pearson"))
-  B = lapply(sample_b, function(x) cor(x, method = "pearson"))
+  A_flat = colMeans(t(sapply(A, unlist)))
+  B_flat = colMeans(t(sapply(B, unlist)))
+  
+  t_a[i] = quantile(A_flat, .8, names = F)
+  t_b[i] = quantile(B_flat, .8, names = F)
   
   # flatted correlation matrices
-  A_flat = t(sapply(A, unlist))
-  B_flat = t(sapply(B, unlist))
-  
-  # average correlation per group
-  A_flat_boot = A_flat_boot + A_flat
-  B_flat_boot = B_flat_boot + B_flat
+  A_flat_boot[i,] = A_flat
+  B_flat_boot[i,] = B_flat
 }
 
-A_flat_boot = A_flat_boot / b
-B_flat_boot = B_flat_boot / b
+sd_boot_a = colSds(A_flat_boot)
+sd_boot_b = colSds(B_flat_boot)
+d = 116
+m = d*(d-1)/2
+z = qnorm(1-0.05/m)
 
-# building adjacency matrix for ASD group
-G_bonferroni_boot = build_graph(A_flat_boot, B_flat_boot)
-G_raw_boot = build_graph(A_flat_boot, B_flat_boot, adjust = F)
+lower_a = mu_cor_a - z*sd_boot_a
+upper_a = mu_cor_a + z*sd_boot_a
+t_a = mean(t_a)
+t_b = mean(t_b)
 
-plot_comparison_graphs(G_bonferroni_boot, G_raw_boot)
+M_a = sapply(1:length(mu_boot), function(i) int.test(lower_a[i], upper_a[i], t_a))
+M_a = to_matrix(as.integer(M_a))
+
+par(mfrow=c(2,2), mai=c(.1,.1,.2,.1))
+plot_graph(M_a, title = "Group A")
+plot_graph(Gb_boot, title = "Group B")
+plot_graph(M_a, title = "", community = T)
+plot_graph(Gb_boot, title = "", community = T)
 
 # Difference graph
 A_means = colMeans(A_flat_boot)
@@ -175,4 +196,3 @@ plot_degree_distributions = function(flat_matrices, titles) {
 
 par(mfrow=c(1,1), mai=c(.5,.5,.5,.5))
 plot_degree_distributions(delta_matrices, titles)
-
