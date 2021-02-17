@@ -147,13 +147,14 @@ z = qnorm(1-0.05/m)
 se_boot_a = apply(A_boot, MARGIN = 2, sd)
 se_boot_b = apply(B_boot, MARGIN = 2, sd)
 
+# Normal confidence intervals
 lower_a = mu_cor_a - z * se_boot_a
 upper_a = mu_cor_a + z * se_boot_a
 
 lower_b = mu_cor_b - z * se_boot_b
 upper_b = mu_cor_b + z * se_boot_b
 
-# percentile interval
+# Adjacency matrices
 M_a = to_matrix(sapply(1:116^2, function(i) int.test(lower_a[i], upper_a[i], t_a)))
 M_b = to_matrix(sapply(1:116^2, function(i) int.test(lower_b[i], upper_b[i], t_b)))
 
