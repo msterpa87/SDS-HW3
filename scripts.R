@@ -135,11 +135,8 @@ for(i in 1:b) {
   idx_a = sample(1:n, n, replace = T)
   idx_b = sample(1:n, n, replace = T)
   
-  sample_a = A_flat[idx_a,]
-  sample_b = B_flat[idx_b,]
-  
-  A_boot[i,] = average_cor(sample_a)
-  B_boot[i,] = average_cor(sample_b)
+  A_boot[i,] = average_cor(A_flat[idx_a,])
+  B_boot[i,] = average_cor(B_flat[idx_b,])
 }
 
 d = 116
