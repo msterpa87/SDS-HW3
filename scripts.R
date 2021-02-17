@@ -4,6 +4,9 @@ library(matrixStats)
 
 load("C:/Users/Stefania/Desktop/Sapienza/I SEMESTRE_20-21/STATISTICAL METHODS IN DATA SCIENCE AND LABORATORY I/HW3/hw3_data.RData")
 
+average_cor = function(M) FisherZInv(colMeans(FisherZ(M)))
+to_matrix = function(M_flat) matrix(M_flat, nrow=116, byrow=T)
+
 build_graph = function(A_flat, B_flat, probs = 0.8, adjust = TRUE) {
   # Bonferroni adjusted confidence level
   d = 116
@@ -11,13 +14,13 @@ build_graph = function(A_flat, B_flat, probs = 0.8, adjust = TRUE) {
   if(adjust) alpha = 1 - 0.05 / m
   else alpha = 1 - 0.05
   
-  # thresholds
-  t_a = quantile(A_flat, probs = probs, names = F)
-  t_b = quantile(B_flat, probs = probs, names = F)
-  
   # average correlation per group
-  A_means = colMeans(A_flat)
-  B_means = colMeans(B_flat)
+  A_means = average_cor(A_flat)
+  B_means = average_cor(B_flat)
+  
+  # thresholds
+  t_a = quantile(A_means, probs = probs, names = F, na.rm = T)
+  t_b = quantile(B_means, probs = probs, names = F, na.rm = T)
   
   # Fisher confidence intervals
   A_fisher = sapply(A_means, function(x) CorCI(x, n = 145, conf.level = alpha))
@@ -27,8 +30,8 @@ build_graph = function(A_flat, B_flat, probs = 0.8, adjust = TRUE) {
   n = dim(A_fisher)[2]
   A_matrix = sapply(1:n, function(i) int.test(A_fisher[2,i], A_fisher[3,i], t_a))
   B_matrix = sapply(1:n, function(i) int.test(B_fisher[2,i], B_fisher[3,i], t_b))
-  A_matrix = matrix(as.integer(A_matrix), nrow = 116, byrow = TRUE)
-  B_matrix = matrix(as.integer(B_matrix), nrow = 116, byrow = TRUE)
+  A_matrix = to_matrix(A_matrix)
+  B_matrix = to_matrix(B_matrix)
   
   return(list(A = A_matrix, B = B_matrix))
 }
@@ -82,6 +85,7 @@ G_bonferroni = build_graph(A_flat, B_flat)
 G_raw = build_graph(A_flat, B_flat, adjust = F)
 
 plot_comparison_graphs(G_bonferroni, G_raw)
+plot_comparison_graphs(G_bonferroni, G_raw, community = T)
 
 # histograms of co-activation with sliding threshold
 probs = seq(0.5, 1, 0.05)
@@ -109,56 +113,68 @@ legend("topright", legend=c("Bonferroni", "Non-Adjusted"),
        col=c("seagreen3", "indianred3"), lty=1, lwd=3)
 grid()
 
-# Bootstrap
-B = 100
+#######################################
+#               BOOTSTRAP             #
+#######################################
+
+b = 1000
+
+A_flat = do.call(rbind, asd_sel)
+B_flat = do.call(rbind, td_sel)
 
 # point estimate correlation
-mu_cor_a = colMeans(A_flat)
-mu_cor_b = colMeans(B_flat)
+mu_cor_a = cor(A_flat, method="pearson")
+mu_cor_b = cor(B_flat, method="pearson")
 
-A_flat_boot = matrix(NA, nrow = b, ncol = 116^2)
-B_flat_boot = matrix(NA, nrow = b, ncol = 116^2)
-asd_cor = lapply(asd_sel, function(x) cor(x, method = "pearson"))
-td_cor = lapply(td_sel, function(x) cor(x, method = "pearson"))
+A_boot = matrix(NA, nrow = b, ncol = 116^2)
+B_boot = matrix(NA, nrow = b, ncol = 116^2)
 
-t_a = rep(NA, B)
-t_b = rep(NA, B)
+n = 145*12
 
-for(i in 1:B) {
+for(i in 1:b) {
   # re-sample of each group
-  A = sample(asd_cor, 12, replace = T)
-  B = sample(td_cor, 12, replace = T)
+  idx_a = sample(1:n, n, replace = T)
+  idx_b = sample(1:n, n, replace = T)
   
-  A_flat = colMeans(t(sapply(A, unlist)))
-  B_flat = colMeans(t(sapply(B, unlist)))
+  A_star = A_flat[idx_a,]
+  B_star = B_flat[idx_b,]
   
-  t_a[i] = quantile(A_flat, .8, names = F)
-  t_b[i] = quantile(B_flat, .8, names = F)
-  
-  # flatted correlation matrices
-  A_flat_boot[i,] = A_flat
-  B_flat_boot[i,] = B_flat
+  A_boot[i,] = unlist(cor(A_star, method = "pearson"), use.names = F)
+  B_boot[i,] = unlist(cor(B_star, method = "pearson"), use.names = F)
 }
 
-sd_boot_a = colSds(A_flat_boot)
-sd_boot_b = colSds(B_flat_boot)
 d = 116
 m = d*(d-1)/2
 z = qnorm(1-0.05/m)
 
-lower_a = mu_cor_a - z*sd_boot_a
-upper_a = mu_cor_a + z*sd_boot_a
-t_a = mean(t_a)
-t_b = mean(t_b)
+# Bootstrap standard error
+se_boot_a = apply(A_boot, MARGIN = 2, sd)
+se_boot_b = apply(B_boot, MARGIN = 2, sd)
 
-M_a = sapply(1:length(mu_boot), function(i) int.test(lower_a[i], upper_a[i], t_a))
+lower_a = mu_cor_a - z * se_boot_a
+upper_a = mu_cor_a + z * se_boot_a
+t_a = quantile(mu_cor_a, probs = .9)
+
+lower_b = mu_cor_b - z * se_boot_b
+upper_b = mu_cor_b + z * se_boot_b
+t_b = quantile(mu_cor_b, probs = .9)
+
+# percentile interval
+lower_a = apply(A_boot, MARGIN = 2, FUN = function(x) quantile(x, probs=0.05/m))
+upper_a = apply(A_boot, MARGIN = 2, FUN = function(x) quantile(x, probs=1-0.05/m))
+
+M_a = sapply(1:116^2, function(i) int.test(lower_a[i], upper_a[i], t_a))
 M_a = to_matrix(as.integer(M_a))
+M_b = sapply(1:116^2, function(i) int.test(lower_b[i], upper_b[i], t_b))
+M_b = to_matrix(as.integer(M_b))
+
+D = M_a != M_b
 
 par(mfrow=c(2,2), mai=c(.1,.1,.2,.1))
-plot_graph(M_a, title = "Group A")
-plot_graph(Gb_boot, title = "Group B")
-plot_graph(M_a, title = "", community = T)
-plot_graph(Gb_boot, title = "", community = T)
+plot_graph(D, title = "Group A")
+plot_graph(M_b, title = "Group B")
+plot_graph(D, title = "", community = T)
+plot_graph(M_b, title = "", community = T)
 
 # Difference graph
 A_means = colMeans(A_flat_boot)
@@ -170,7 +186,6 @@ t_range = quantile(G_delta, probs = c(0.85, 0.95))
 t_diff = seq(t_range[1], t_range[2], length.out = 4)
 adj_matrix = function(t) as.integer(G_delta >= t)
 delta_matrices = t(sapply(t_diff, adj_matrix))
-to_matrix = function(M_flat) matrix(M_flat, nrow=116, byrow=T)
 titles = unlist(lapply(t_diff, function(t) paste(c("t =", round(t,2)), collapse = " ")))
 
 plot_degree_distributions = function(flat_matrices, titles) {
