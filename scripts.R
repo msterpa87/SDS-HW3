@@ -33,6 +33,10 @@ build_graph = function(A_flat, B_flat, probs = 0.8, adjust = TRUE) {
   A_matrix = to_matrix(A_matrix)
   B_matrix = to_matrix(B_matrix)
   
+  # fix diagonal NA
+  A_matrix[is.na(A_matrix)] = 0
+  B_matrix[is.na(B_matrix)] = 0
+  
   return(list(A = A_matrix, B = B_matrix))
 }
 
