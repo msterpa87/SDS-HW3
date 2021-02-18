@@ -161,14 +161,12 @@ plot_degree_distributions(delta_matrices, titles)
 b = 100
 
 # point estimate correlation
-mu_cor_a = average_cor(A_flat)
-mu_cor_b = average_cor(B_flat)
+cor_diff = abs(average_cor(A_flat) - average_cor(B_flat))
+cor_diff[is.na(cor_diff)] = 0
 
-t_a = quantile(mu_cor_a, probs = .8, na.rm = T)
-t_b = quantile(mu_cor_b, probs = .8, na.rm = T)
+t = quantile(cor_diff, probs = .5, na.rm = T)
 
-A_boot = matrix(NA, nrow = b, ncol = 116^2)
-B_boot = matrix(NA, nrow = b, ncol = 116^2)
+D_boot = matrix(NA, nrow = b, ncol = 116^2)
 
 n = 12
 
@@ -176,30 +174,27 @@ for(i in 1:b) {
   idx_a = sample(1:n, n, replace = T)
   idx_b = sample(1:n, n, replace = T)
   
-  A_boot[i,] = average_cor(A_flat[idx_a,])
-  B_boot[i,] = average_cor(B_flat[idx_b,])
+  sample_a = average_cor(A_flat[idx_a,])
+  sample_b = average_cor(B_flat[idx_b,])
+  
+  D_boot[i,] = abs(sample_a - sample_b)
 }
 
 d = 116
 m = d*(d-1)/2
-z = qnorm(1-0.05/m)
+alpha = 0.05/m
+z = qnorm(1-alpha)
 
 # Normal confidence intervals
-se_boot_a = apply(A_boot, MARGIN = 2, sd)
-se_boot_b = apply(B_boot, MARGIN = 2, sd)
-
-lower_a = mu_cor_a - z * se_boot_a
-upper_a = mu_cor_a + z * se_boot_a
-
-lower_b = mu_cor_b - z * se_boot_b
-upper_b = mu_cor_b + z * se_boot_b
+se_boot = apply(FisherZ(D_boot), MARGIN = 2, sd)
+se_boot[is.na(se_boot)] = 0
+ 
+lower = FisherZInv(FisherZ(cor_diff) - z * se_boot)
+upper = FisherZInv(FisherZ(cor_diff) + z * se_boot)
 
 # Adjacency matrices
-M_a = to_matrix(sapply(1:116^2, function(i) int.test(lower_a[i], upper_a[i], t_a)))
-M_b = to_matrix(sapply(1:116^2, function(i) int.test(lower_b[i], upper_b[i], t_b)))
+M = get_adjancency_matrix(lower, upper, 0.0001)
 
-par(mfrow=c(2,2), mai=c(.1,.1,.2,.1))
-plot_graph(M_a, title = "Group A")
-plot_graph(M_b, title = "Group B")
-plot_graph(M_a, title = "", community = T)
-plot_graph(M_b, title = "", community = T)
+par(mfrow=c(1,2), mai=c(.1,.1,.2,.1))
+plot_graph(M, title = "Difference graph")
+plot_graph(M, title = "", community = T)
