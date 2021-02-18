@@ -2,10 +2,13 @@ library(DescTools)
 library(igraph)
 library(matrixStats)
 
-load("C:/Users/Stefania/Desktop/Sapienza/I SEMESTRE_20-21/STATISTICAL METHODS IN DATA SCIENCE AND LABORATORY I/HW3/hw3_data.RData")
+load("hw3_data.RData")
 
 average_cor = function(M) FisherZInv(colMeans(FisherZ(M)))
 to_matrix = function(M_flat) matrix(as.integer(M_flat), nrow=116, byrow=T)
+
+# test for empty intersection of [-t,t] with CI(j,k)
+int.test <- function(lower, upper, t) (t < lower) | (-t > upper)
 
 build_graph = function(A_flat, B_flat, probs = 0.8, adjust = TRUE) {
   # Bonferroni adjusted confidence level
@@ -28,16 +31,18 @@ build_graph = function(A_flat, B_flat, probs = 0.8, adjust = TRUE) {
   
   # adjacency matrices
   n = dim(A_fisher)[2]
-  A_matrix = sapply(1:n, function(i) int.test(A_fisher[2,i], A_fisher[3,i], t_a))
-  B_matrix = sapply(1:n, function(i) int.test(B_fisher[2,i], B_fisher[3,i], t_b))
-  A_matrix = to_matrix(A_matrix)
-  B_matrix = to_matrix(B_matrix)
-  
-  # fix diagonal NA
-  A_matrix[is.na(A_matrix)] = 0
-  B_matrix[is.na(B_matrix)] = 0
+  A_matrix = get_adjancency_matrix(lower = A_fisher[2,], upper = A_fisher[3,],
+                                   threshold = t_a)
+  B_matrix = get_adjancency_matrix(lower = B_fisher[2,], upper = B_fisher[3,],
+                                   threshold = t_b)
   
   return(list(A = A_matrix, B = B_matrix))
+}
+
+get_adjancency_matrix = function(lower, upper, threshold) {
+  M = to_matrix(sapply(1:length(lower), function(i) int.test(lower[i], upper[i], threshold)))
+  M[is.na(M)] = 0
+  return(M)
 }
 
 set_graph_params = function(G) {
@@ -71,10 +76,6 @@ plot_comparison_graphs = function(G_bonferroni, G_raw, community=F) {
   invisible(sapply(1:4, function(i) plot_graph(graph_list[[i]], title_list[[i]],
                                                community=community)))
 }
-
-# test for empty intersection of [-t,t] with CI(j,k)
-# TRUE iff H_0 is rejected
-int.test <- function(lower, upper, t) (t < lower) | (-t > upper)
 
 # correlation matrices
 A = lapply(asd_sel, function(x) cor(x, method = "pearson"))
@@ -117,60 +118,9 @@ legend("topright", legend=c("Bonferroni", "Non-Adjusted"),
        col=c("seagreen3", "indianred3"), lty=1, lwd=3)
 grid()
 
-#######################################
-#               BOOTSTRAP             #
-#######################################
-
-b = 100
-
-# point estimate correlation
-mu_cor_a = average_cor(A_flat)
-mu_cor_b = average_cor(B_flat)
-
-t_a = quantile(mu_cor_a, probs = .8, na.rm = T)
-t_b = quantile(mu_cor_b, probs = .8, na.rm = T)
-
-A_boot = matrix(NA, nrow = b, ncol = 116^2)
-B_boot = matrix(NA, nrow = b, ncol = 116^2)
-
-n = 12
-
-for(i in 1:b) {
-  idx_a = sample(1:n, n, replace = T)
-  idx_b = sample(1:n, n, replace = T)
-  
-  A_boot[i,] = average_cor(A_flat[idx_a,])
-  B_boot[i,] = average_cor(B_flat[idx_b,])
-}
-
-d = 116
-m = d*(d-1)/2
-z = qnorm(1-0.05/m)
-
-# Bootstrap standard error
-se_boot_a = apply(A_boot, MARGIN = 2, sd)
-se_boot_b = apply(B_boot, MARGIN = 2, sd)
-
-# Normal confidence intervals
-lower_a = mu_cor_a - z * se_boot_a
-upper_a = mu_cor_a + z * se_boot_a
-
-lower_b = mu_cor_b - z * se_boot_b
-upper_b = mu_cor_b + z * se_boot_b
-
-# Adjacency matrices
-M_a = to_matrix(sapply(1:116^2, function(i) int.test(lower_a[i], upper_a[i], t_a)))
-M_b = to_matrix(sapply(1:116^2, function(i) int.test(lower_b[i], upper_b[i], t_b)))
-
-par(mfrow=c(2,2), mai=c(.1,.1,.2,.1))
-plot_graph(M_a, title = "Group A")
-plot_graph(M_b, title = "Group B")
-plot_graph(M_a, title = "", community = T)
-plot_graph(M_b, title = "", community = T)
-
 # Difference graph
-A_means = colMeans(A_flat_boot)
-B_means = colMeans(B_flat_boot)
+A_means = colMeans(A_flat)
+B_means = colMeans(B_flat)
 G_delta = abs(A_means - B_means)
 
 # Plot of differences at different thresholds
@@ -203,3 +153,53 @@ plot_degree_distributions = function(flat_matrices, titles) {
 
 par(mfrow=c(1,1), mai=c(.5,.5,.5,.5))
 plot_degree_distributions(delta_matrices, titles)
+
+#######################################
+#               BOOTSTRAP             #
+#######################################
+
+b = 100
+
+# point estimate correlation
+mu_cor_a = average_cor(A_flat)
+mu_cor_b = average_cor(B_flat)
+
+t_a = quantile(mu_cor_a, probs = .8, na.rm = T)
+t_b = quantile(mu_cor_b, probs = .8, na.rm = T)
+
+A_boot = matrix(NA, nrow = b, ncol = 116^2)
+B_boot = matrix(NA, nrow = b, ncol = 116^2)
+
+n = 12
+
+for(i in 1:b) {
+  idx_a = sample(1:n, n, replace = T)
+  idx_b = sample(1:n, n, replace = T)
+  
+  A_boot[i,] = average_cor(A_flat[idx_a,])
+  B_boot[i,] = average_cor(B_flat[idx_b,])
+}
+
+d = 116
+m = d*(d-1)/2
+z = qnorm(1-0.05/m)
+
+# Normal confidence intervals
+se_boot_a = apply(A_boot, MARGIN = 2, sd)
+se_boot_b = apply(B_boot, MARGIN = 2, sd)
+
+lower_a = mu_cor_a - z * se_boot_a
+upper_a = mu_cor_a + z * se_boot_a
+
+lower_b = mu_cor_b - z * se_boot_b
+upper_b = mu_cor_b + z * se_boot_b
+
+# Adjacency matrices
+M_a = to_matrix(sapply(1:116^2, function(i) int.test(lower_a[i], upper_a[i], t_a)))
+M_b = to_matrix(sapply(1:116^2, function(i) int.test(lower_b[i], upper_b[i], t_b)))
+
+par(mfrow=c(2,2), mai=c(.1,.1,.2,.1))
+plot_graph(M_a, title = "Group A")
+plot_graph(M_b, title = "Group B")
+plot_graph(M_a, title = "", community = T)
+plot_graph(M_b, title = "", community = T)
