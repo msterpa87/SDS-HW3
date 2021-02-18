@@ -163,33 +163,33 @@ grid()
 
 ## Non-parametric bootstrap
 ```{r boot, warning=FALSE}
-b = 1000
+b = 100
+#number of ROI
 d = 116
+#adjustment
 m = d*(d-1)/2
 z = qnorm(1-0.05/m)
 
-A_flat = do.call(rbind, asd_sel)
-B_flat = do.call(rbind, td_sel)
-
 # point estimate correlation
-mu_cor_a = cor(A_flat, method="pearson")
-mu_cor_b = cor(B_flat, method="pearson")
+mu_cor_a = average_cor(A_flat)
+mu_cor_b = average_cor(B_flat)
+
+#thresholds
+t_a = quantile(mu_cor_a, probs = .8, na.rm = T)
+t_b = quantile(mu_cor_b, probs = .8, na.rm = T)
 
 A_boot = matrix(NA, nrow = b, ncol = 116^2)
 B_boot = matrix(NA, nrow = b, ncol = 116^2)
 
-n = 145*12
+#number of samples
+n = 12
 
 for(i in 1:b) {
-  # re-sample of each group
   idx_a = sample(1:n, n, replace = T)
   idx_b = sample(1:n, n, replace = T)
   
-  A_star = A_flat[idx_a,]
-  B_star = B_flat[idx_b,]
-  
-  A_boot[i,] = unlist(cor(A_star, method = "pearson"), use.names = F)
-  B_boot[i,] = unlist(cor(B_star, method = "pearson"), use.names = F)
+  A_boot[i,] = average_cor(A_flat[idx_a,])
+  B_boot[i,] = average_cor(B_flat[idx_b,])
 }
 ```
 
@@ -199,31 +199,23 @@ for(i in 1:b) {
 se_boot_a = apply(A_boot, MARGIN = 2, sd)
 se_boot_b = apply(B_boot, MARGIN = 2, sd)
 
+# Normal confidence intervals
 lower_a = mu_cor_a - z * se_boot_a
 upper_a = mu_cor_a + z * se_boot_a
-t_a = quantile(mu_cor_a, probs = .9)
 
 lower_b = mu_cor_b - z * se_boot_b
 upper_b = mu_cor_b + z * se_boot_b
-t_b = quantile(mu_cor_b, probs = .9)
 
-# percentile interval
-lower_a = apply(A_boot, MARGIN = 2, FUN = function(x) quantile(x, probs=0.05/m))
-upper_a = apply(A_boot, MARGIN = 2, FUN = function(x) quantile(x, probs=1-0.05/m))
-
-M_a = sapply(1:116^2, function(i) int.test(lower_a[i], upper_a[i], t_a))
-M_a = to_matrix(as.integer(M_a))
-M_b = sapply(1:116^2, function(i) int.test(lower_b[i], upper_b[i], t_b))
-M_b = to_matrix(as.integer(M_b))
-
-D = M_a != M_b
+# Adjacency matrices
+M_a = to_matrix(sapply(1:116^2, function(i) int.test(lower_a[i], upper_a[i], t_a)))
+M_b = to_matrix(sapply(1:116^2, function(i) int.test(lower_b[i], upper_b[i], t_b)))
 ```
 
 ```{r echo=FALSE, message=FALSE}
 par(mfrow=c(2,2), mai=c(.1,.1,.2,.1))
-plot_graph(D, title = "Group A")
+plot_graph(M_a, title = "Group A")
 plot_graph(M_b, title = "Group B")
-plot_graph(D, title = "", community = T)
+plot_graph(M_a, title = "", community = T)
 plot_graph(M_b, title = "", community = T)
 ```
 
@@ -245,7 +237,6 @@ titles = unlist(lapply(t_diff, function(t) paste(c("t =", round(t,2)), collapse 
 
 ## Degree distributions at different thresholds
 ```{r boot_plot, warning=FALSE}
-
 plot_degree_distributions = function(flat_matrices, titles) {
   colors = c("deeppink", "deepskyblue", "gold2", "orchid")
   for(i in 1:4) {
