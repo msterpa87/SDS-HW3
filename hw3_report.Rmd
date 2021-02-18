@@ -1,9 +1,9 @@
 ---
 title: "SDS - HW3 - Connect your brain"
-author:   Marco Aurelio Sterpa
-          Stefania Sferragatta
-
-output: html_document
+author: "Marco Aurelio Sterpa Stefania Sferragatta"
+output:
+  html_document: default
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -14,7 +14,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(DescTools)
 library(igraph)
 library(matrixStats)
-load("C:/Users/Stefania/Desktop/Sapienza/I SEMESTRE_20-21/STATISTICAL METHODS IN DATA SCIENCE AND LABORATORY I/HW3/hw3_data.RData")
+load("hw3_data.RData")
 ```
 
 ## Build the graphs & Intersection test
@@ -30,6 +30,16 @@ Then we save the estimated graphs as adjacency matrices, that are the output of 
 ```{r loading, warning=FALSE}
 average_cor = function(M) FisherZInv(colMeans(FisherZ(M)))
 to_matrix = function(M_flat) matrix(M_flat, nrow=116, byrow=T)
+
+get_adjancency_matrix = function(lower, upper, threshold) {
+  M = to_matrix(sapply(1:length(lower), function(i) int.test(lower[i], upper[i], threshold)))
+  M[is.na(M)] = 0
+  return(M)
+}
+
+# test for empty intersection of [-t,t] with CI(j,k)
+int.test <- function(lower, upper, t) (t < lower) | (-t > upper)
+
 
 build_graph = function(A_flat, B_flat, probs = 0.8, adjust = TRUE) {
   # Bonferroni adjusted confidence level
@@ -52,16 +62,13 @@ build_graph = function(A_flat, B_flat, probs = 0.8, adjust = TRUE) {
   
   # adjacency matrices
   n = dim(A_fisher)[2]
-  A_matrix = sapply(1:n, function(i) int.test(A_fisher[2,i], A_fisher[3,i], t_a))
-  B_matrix = sapply(1:n, function(i) int.test(B_fisher[2,i], B_fisher[3,i], t_b))
-  A_matrix = to_matrix(A_matrix)
-  B_matrix = to_matrix(B_matrix)
+  A_matrix = get_adjancency_matrix(lower = A_fisher[2,], upper = A_fisher[3,],
+                                   threshold = t_a)
+  B_matrix = get_adjancency_matrix(lower = B_fisher[2,], upper = B_fisher[3,],
+                                   threshold = t_b)
   
   return(list(A = A_matrix, B = B_matrix))
 }
-# test for empty intersection of [-t,t] with CI(j,k)
-# TRUE if H_0 is rejected
-int.test <- function(lower, upper, t) (t < lower) | (-t > upper)
 ```
 
 
@@ -156,6 +163,44 @@ legend("topright", legend=c("Bonferroni", "Non-Adjusted"),
 grid()
 ```
 
+```{r boot_plot, warning=FALSE}
+# Difference graph
+A_means = colMeans(A_flat)
+B_means = colMeans(B_flat)
+G_delta = abs(A_means - B_means)
+
+# Plot of differences at different thresholds
+t_range = quantile(G_delta, probs = c(0.85, 0.95))
+t_diff = seq(t_range[1], t_range[2], length.out = 4)
+adj_matrix = function(t) as.integer(G_delta >= t)
+delta_matrices = t(sapply(t_diff, adj_matrix))
+titles = unlist(lapply(t_diff, function(t) paste(c("t =", round(t,2)), collapse = " ")))
+
+plot_degree_distributions = function(flat_matrices, titles) {
+  colors = c("deeppink", "deepskyblue", "gold2", "orchid")
+  for(i in 1:4) {
+    M = to_matrix(flat_matrices[i,])
+    G = graph_from_adjacency_matrix(M, mode="undirected")
+    deg = degree(G, mode="all")
+    deg.dist = degree.distribution(G, cumulative=T, mode="all")
+    if(i == 1) {
+      plot(x=0:max(deg), y=1-deg.dist, pch=19, type="l", col=colors[i],
+           xlab="Degree", ylab="Cumulative frequency",
+           main="Degree distribution at different thresholds" , lwd=2)
+    }
+    else {
+      lines(x=0:max(deg), y=1-deg.dist,
+            col=colors[i], lwd=2)
+    }
+  }
+  grid()
+  legend("bottomright", legend=titles, col=colors, lty=1, lwd=2)
+}
+
+par(mfrow=c(1,1), mai=c(.5,.5,.5,.5))
+plot_degree_distributions(delta_matrices, titles)
+```
+
 
 ## Conclusions
 
@@ -219,47 +264,3 @@ plot_graph(M_a, title = "", community = T)
 plot_graph(M_b, title = "", community = T)
 ```
 
-
-```{r}
-# Difference graph
-A_means = colMeans(A_flat_boot)
-B_means = colMeans(B_flat_boot)
-G_delta = abs(A_means - B_means)
-
-# Plot of differences at different thresholds
-t_range = quantile(G_delta, probs = c(0.85, 0.95))
-t_diff = seq(t_range[1], t_range[2], length.out = 4)
-adj_matrix = function(t) as.integer(G_delta >= t)
-delta_matrices = t(sapply(t_diff, adj_matrix))
-titles = unlist(lapply(t_diff, function(t) paste(c("t =", round(t,2)), collapse = " ")))
-```
-
-
-## Degree distributions at different thresholds
-```{r boot_plot, warning=FALSE}
-plot_degree_distributions = function(flat_matrices, titles) {
-  colors = c("deeppink", "deepskyblue", "gold2", "orchid")
-  for(i in 1:4) {
-    M = to_matrix(flat_matrices[i,])
-    G = graph_from_adjacency_matrix(M, mode="undirected")
-    deg = degree(G, mode="all")
-    deg.dist = degree.distribution(G, cumulative=T, mode="all")
-    if(i == 1) {
-      plot(x=0:max(deg), y=1-deg.dist, pch=19, type="l", col=colors[i],
-           xlab="Degree", ylab="Cumulative frequency",
-           main="Degree distribution at different thresholds" , lwd=2)
-    }
-    else {
-      lines(x=0:max(deg), y=1-deg.dist,
-            col=colors[i], lwd=2)
-    }
-  }
-  grid()
-  legend("bottomright", legend=titles, col=colors, lty=1, lwd=2)
-}
-```
-
-```{r plot, echo=FALSE}
-par(mfrow=c(1,1), mai=c(.5,.5,.5,.5))
-plot_degree_distributions(delta_matrices, titles)
-```
