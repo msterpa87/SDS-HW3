@@ -1,6 +1,7 @@
 ---
-title: "SDS - HW3 - Connect your brain"
-author: "Marco Aurelio Sterpa Stefania Sferragatta"
+title: SDS - HW3 - Connect your brain
+author: Marco Aurelio Sterpa
+        | Stefania Sferragatta
 output:
   html_document: default
   pdf_document: default
@@ -10,23 +11,23 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r utilities, warning=FALSE,results = 'hide'}
-library(DescTools)
-library(igraph)
-library(matrixStats)
+```{r utilities, message=FALSE, warning=FALSE}
+library(DescTools, verbose = F)
+library(igraph, verbose = F)
+library(matrixStats, verbose = F)
 load("hw3_data.RData")
 ```
 
 ## Build the graphs & Intersection test
-In order to compute the evaluation of the dependency between cortical regions, the starting point is to build an association graph. The vertexes are the features of each sample (that are as many as the subjects) and the edges are the relationships between them. 
+In order to compute the evaluation of the dependency between cortical regions, the starting point is to build an association graph. The vertices are the features of each sample (that are as many as the subjects) and the edges are the relationships between them. 
 
-In this function we build our estimates related to the true association graphs. First of all we define adjustment of nominal level of the intervals with the Bonferroni correction, computed by replacing the $\alpha$ with $\frac{\alpha}{m}$ where m is the binomial coefficient (D,2) that indicates the number of intervals we are going to build. 
+In this function we build our estimates related to the true association graphs. First of all we define adjustment of nominal level of the intervals with the Bonferroni correction, computed by replacing the $\alpha$ with $\frac{\alpha}{m}$ where m is the binomial coefficient $D \choose 2$ that indicates the number of intervals we are going to build. 
 
 Then for each group we define a threshold given by the $80^{th}$ percentile of the correlation values, it will be used in the test for empty intersection define after this function. 
 
-Before build the Fisher Z-transform confidence interval, we apply the pooling process on the data. Thanks to it we gather together sets of data related to each subject that are assumed to have the same value of a characteristic, in order to use the combined larger set to obtain a more precise estimate of that characteristic. The common characteristic we choose is the mean, so we compute the function `average_cor` on each (flatted) group and use these data for building the confidence interval. 
+We start by computing the correlation matrices for each subject and the pool this data together taking the average as they are supposed to be independent. We now have two correlation matrices representing the observed correlation in each group to which we apply the Fisher Z-transform to obtain confidence interval. 
 
-Then we save the estimated graphs as adjacency matrices, that are the output of our function.
+The correlation graphs estimates are built by placing an edge between features with empty intersection between its CI and the interval $[-t,t]$, where $t=q_.8$.
 ```{r loading, warning=FALSE}
 average_cor = function(M) FisherZInv(colMeans(FisherZ(M)))
 to_matrix = function(M_flat) matrix(M_flat, nrow=116, byrow=T)
@@ -108,7 +109,7 @@ plot_comparison_graphs = function(G_bonferroni, G_raw, community=F) {
 
 
 ## Define che correlation matrices 
-In this section we define the data we need in order to apply the methods defined above. Firstly we create the two correlation matrices using the Pearson correlation, then to simplify operations we 'flat' the matrices and we pass them to the `build_graph` to obtain the two types: adjusted and not adjusted.
+In this section we preprocess the data we need in order to apply the methods defined above. Firstly we create the two correlation matrices using the Pearson correlation, then to simplify operations we 'flat' the matrices and we pass them to the `build_graph` to obtain the two types: adjusted and not adjusted.
 ```{r test, warning=FALSE}
 # correlation matrices
 A = lapply(asd_sel, function(x) cor(x, method = "pearson"))
@@ -129,10 +130,10 @@ plot_comparison_graphs(G_bonferroni, G_raw)
 plot_comparison_graphs(G_bonferroni, G_raw, community = T)
 ```
 
-## Co-activation between groups
-Until now we tested the co-activation between groups with a specific threshold, but what happens with different threshold values? In the following loop we test different thresholds on the estimated graphs.
+## Paired correlation between groups
+Until now we tested the correlations within groups with a specific threshold, in the following we look at the number of concomitant correlations above threshold between groups. To do so we first build the individual graphs and then compare their adjacency matrix, a plot of the number of correlations the two groups agree on (i.e. both above threshold) is then plotted.
 ```{r th, warning=FALSE}
-# co-activation with sliding threshold
+# Paired correlation with sliding threshold
 probs = seq(0.5, 1, 0.05)
 n = length(probs)
 n_coact_bonf = rep(NA, n)
@@ -142,19 +143,18 @@ for(i in 1:n) {
   G_bonf = build_graph(A_flat, B_flat, probs = probs[i], adjust = T)
   G_raw = build_graph(A_flat, B_flat, probs = probs[i], adjust = F)
   
-  # number of paired co-activation between groups
+  # number of paired correlation between groups
   n_coact_bonf[i] = sum((G_bonf$A == 1) & (G_bonf$B == 1)) - 116
   n_coact_raw[i] = sum((G_raw$A == 1) & (G_raw$B == 1)) - 116
 }
 ```
 
 
-## Visualize the co-activation at different thresholds
 ```{r graph, echo=FALSE}
-par(mfrow = c(1,1), mai=c(.5,.5,.5,.5))
+par(mfrow = c(1,1), mai=c(1,1,1,1))
 plot(x = probs, y = n_coact_bonf, type = "b", col = "seagreen3", pch = 16, xlab = "Threshold",
-     ylab = "Number of Paired Co-Activations", ylim = range(n_coact_raw), lwd = 2,
-     main = "Co-activation at different thresholds")
+     ylab = "Number of Paired Correlations", ylim = range(n_coact_raw), lwd = 2,
+     main = "Paired correlations at different thresholds")
 lines(x = probs, y = n_coact_raw, type = "b", col = "indianred3", pch = 16, lwd = 2)
 segments(.5, n_coact_bonf[7], 1, n_coact_bonf[7], lwd = 2, lty = 2, col = "lightcyan4")
 text(.8, n_coact_bonf[7] - 150, bquote(q[80]),lwd = 2)
@@ -162,6 +162,8 @@ legend("topright", legend=c("Bonferroni", "Non-Adjusted"),
        col=c("seagreen3", "indianred3"), lty=1, lwd=3)
 grid()
 ```
+
+As we can notice from the plot, when the threshold goes up, the number of edges goes down. That’s reasonable since using higher value of threshold means accepting only a stronger association between the features. To emphasize this, we also show the degree distributions of the difference graph: we can see how it changes even if the the smallest and largest thresholds differ by only 0.3.
 
 ```{r boot_plot, warning=FALSE}
 # Difference graph
@@ -197,70 +199,16 @@ plot_degree_distributions = function(flat_matrices, titles) {
   legend("bottomright", legend=titles, col=colors, lty=1, lwd=2)
 }
 
-par(mfrow=c(1,1), mai=c(.5,.5,.5,.5))
+par(mfrow=c(1,1), mai=c(1,1,1,1))
 plot_degree_distributions(delta_matrices, titles)
 ```
 
 
 ## Conclusions
 
-
-
-## Non-parametric bootstrap
-```{r boot, warning=FALSE}
-b = 100
-#number of ROI
-d = 116
-#adjustment
-m = d*(d-1)/2
-z = qnorm(1-0.05/m)
-
-# point estimate correlation
-mu_cor_a = average_cor(A_flat)
-mu_cor_b = average_cor(B_flat)
-
-#thresholds
-t_a = quantile(mu_cor_a, probs = .8, na.rm = T)
-t_b = quantile(mu_cor_b, probs = .8, na.rm = T)
-
-A_boot = matrix(NA, nrow = b, ncol = 116^2)
-B_boot = matrix(NA, nrow = b, ncol = 116^2)
-
-#number of samples
-n = 12
-
-for(i in 1:b) {
-  idx_a = sample(1:n, n, replace = T)
-  idx_b = sample(1:n, n, replace = T)
-  
-  A_boot[i,] = average_cor(A_flat[idx_a,])
-  B_boot[i,] = average_cor(B_flat[idx_b,])
-}
-```
-
-## Build Bootstrap Confidence Interval 
-```{r boot_CI, warning=FALSE}
-# Bootstrap standard error
-se_boot_a = apply(A_boot, MARGIN = 2, sd)
-se_boot_b = apply(B_boot, MARGIN = 2, sd)
-
-# Normal confidence intervals
-lower_a = mu_cor_a - z * se_boot_a
-upper_a = mu_cor_a + z * se_boot_a
-
-lower_b = mu_cor_b - z * se_boot_b
-upper_b = mu_cor_b + z * se_boot_b
-
-# Adjacency matrices
-M_a = to_matrix(sapply(1:116^2, function(i) int.test(lower_a[i], upper_a[i], t_a)))
-M_b = to_matrix(sapply(1:116^2, function(i) int.test(lower_b[i], upper_b[i], t_b)))
-```
-
-```{r echo=FALSE, message=FALSE}
-par(mfrow=c(2,2), mai=c(.1,.1,.2,.1))
-plot_graph(M_a, title = "Group A")
-plot_graph(M_b, title = "Group B")
-plot_graph(M_a, title = "", community = T)
-plot_graph(M_b, title = "", community = T)
+```{r}
+# Conclusions
+G_diff = abs(G_bonferroni$A - G_bonferroni$B)
+plot_graph(G_diff, title = "Difference Graph", community = T)
 ```
 

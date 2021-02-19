@@ -53,6 +53,11 @@ set_graph_params = function(G) {
   return(G)
 }
 
+get_community = function(M) {
+  G = simplify(graph_from_adjacency_matrix(M, mode="undirected"), remove.loops = T)
+  cfg = cluster_fast_greedy(G)
+}
+
 plot_graph = function(M, title, community=F) {
   G = simplify(graph_from_adjacency_matrix(M, mode="undirected"), remove.loops = T)
   G = set_graph_params(G)
@@ -118,6 +123,7 @@ legend("topright", legend=c("Bonferroni", "Non-Adjusted"),
        col=c("seagreen3", "indianred3"), lty=1, lwd=3)
 grid()
 
+
 # Difference graph
 A_means = colMeans(A_flat)
 B_means = colMeans(B_flat)
@@ -151,50 +157,10 @@ plot_degree_distributions = function(flat_matrices, titles) {
   legend("bottomright", legend=titles, col=colors, lty=1, lwd=2)
 }
 
-par(mfrow=c(1,1), mai=c(.5,.5,.5,.5))
+par(mfrow=c(1,1), mai=c(1,1,1,1))
 plot_degree_distributions(delta_matrices, titles)
 
-#######################################
-#               BOOTSTRAP             #
-#######################################
 
-b = 100
-
-# point estimate correlation
-cor_diff = abs(average_cor(A_flat) - average_cor(B_flat))
-cor_diff[is.na(cor_diff)] = 0
-
-t = quantile(cor_diff, probs = .5, na.rm = T)
-
-D_boot = matrix(NA, nrow = b, ncol = 116^2)
-
-n = 12
-
-for(i in 1:b) {
-  idx_a = sample(1:n, n, replace = T)
-  idx_b = sample(1:n, n, replace = T)
-  
-  sample_a = average_cor(A_flat[idx_a,])
-  sample_b = average_cor(B_flat[idx_b,])
-  
-  D_boot[i,] = abs(sample_a - sample_b)
-}
-
-d = 116
-m = d*(d-1)/2
-alpha = 0.05/m
-z = qnorm(1-alpha)
-
-# Normal confidence intervals
-se_boot = apply(FisherZ(D_boot), MARGIN = 2, sd)
-se_boot[is.na(se_boot)] = 0
- 
-lower = FisherZInv(FisherZ(cor_diff) - z * se_boot)
-upper = FisherZInv(FisherZ(cor_diff) + z * se_boot)
-
-# Adjacency matrices
-M = get_adjancency_matrix(lower, upper, 0.0001)
-
-par(mfrow=c(1,2), mai=c(.1,.1,.2,.1))
-plot_graph(M, title = "Difference graph")
-plot_graph(M, title = "", community = T)
+# Conclusions
+G_diff = abs(G_bonferroni$A - G_bonferroni$B)
+plot_graph(G_diff, title = "Difference Graph", community = T)
