@@ -163,4 +163,5 @@ plot_degree_distributions(delta_matrices, titles)
 
 # Conclusions
 G_diff = abs(G_bonferroni$A - G_bonferroni$B)
+par(mfrow=c(1,1), mai=c(.5,.5,.5,.5))
 plot_graph(G_diff, title = "Difference Graph", community = T)
