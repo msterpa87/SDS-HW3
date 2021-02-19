@@ -1,7 +1,6 @@
 ---
 title: SDS - HW3 - Connect your brain
-author: Marco Aurelio Sterpa
-        | Stefania Sferragatta
+author: Marco Aurelio Sterpa, Stefania Sferragatta
 output:
   html_document: default
   pdf_document: default
@@ -205,9 +204,8 @@ plot_degree_distributions(delta_matrices, titles)
 
 
 ## Conclusions
-
+Through the difference graph we can visualize clearly the co-activation differences between the two groups. Indeed there are a couple of communities that are formed by more edges than the others; that communities point out the dissimilarities we are looking for.  
 ```{r}
-# Conclusions
 G_diff = abs(G_bonferroni$A - G_bonferroni$B)
 plot_graph(G_diff, title = "Difference Graph", community = T)
 ```
