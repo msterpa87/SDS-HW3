@@ -1,0 +1,270 @@
+---
+title: SDS - HW3 - Connect your brain
+author: Marco Aurelio Sterpa, Stefania Sferragatta
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r utilities, message=FALSE, warning=FALSE}
+library(DescTools, verbose = F)
+library(igraph, verbose = F)
+library(matrixStats, verbose = F)
+load("hw3_data.RData")
+```
+
+## Build the graphs & Intersection test
+In order to compute the evaluation of the dependency between cortical regions, the starting point is to build an association graph. The vertices are the features of each sample (that are as many as the subjects) and the edges are the relationships between them. 
+
+In this function we build our estimates related to the true association graphs. First of all we define adjustment of nominal level of the intervals with the Bonferroni correction, computed by replacing the $\alpha$ with $\frac{\alpha}{m}$ where m is the binomial coefficient $D \choose 2$ that indicates the number of intervals we are going to build. 
+
+Then for each group we define a threshold given by the $80^{th}$ percentile of the correlation values, it will be used in the test for empty intersection define after this function. 
+
+We start by computing the correlation matrices for each subject and the pooling this data together taking the average as they are supposed to be independent. Whenever we average the correlation we first transform them to the z-scale so that asymptotically they all have the same variance and hopefully get a more robust average and avoid that one subject who shows very different correlations throws off the pooled estimate.
+
+The correlation graphs estimates are built by placing an edge between features with empty intersection between its CI and the interval $[-t,t]$, where $t=q_.8$.
+```{r loading, warning=FALSE}
+to_matrix = function(M_flat) matrix(M_flat, nrow=116, byrow=T)
+
+get_adjancency_matrix = function(lower, upper, threshold) {
+  M = to_matrix(sapply(1:length(lower), function(i) int.test(lower[i], upper[i], threshold)))
+  M[is.na(M)] = 0
+  return(M)
+}
+
+# test for empty intersection of [-t,t] with CI(j,k)
+int.test <- function(lower, upper, t) (t < lower) | (-t > upper)
+
+
+build_graph = function(A_flat, B_flat, probs = 0.8, adjust = TRUE) {
+  # Bonferroni adjusted confidence level
+  d = 116
+  m = d*(d-1)/2
+  if(adjust) alpha = 0.05 / m
+  else alpha = 0.05
+  
+  n = 145
+  
+  # average correlation per group working in the z-scale
+  A_means = colMeans(atanh(A_flat))
+  B_means = colMeans(atanh(B_flat))
+  
+  # thresholds
+  t_a = quantile(A_means, probs = probs, names = F, na.rm = T)
+  t_b = quantile(B_means, probs = probs, names = F, na.rm = T)
+  
+  sigma = 1/sqrt(n - 3)
+  q = qnorm(1-alpha)
+  
+  # Asymptotic CI
+  A_fisher = sapply(A_means, function(x) x + c(-1,1) * q * sigma)
+  B_fisher = sapply(B_means, function(x) x + c(-1,1) * q * sigma)
+  
+  # back transform the CI
+  A_fisher = tanh(A_fisher)
+  B_fisher = tanh(B_fisher)
+  
+  # adjacency matrices
+  n = dim(A_fisher)[2]
+  A_matrix = get_adjancency_matrix(lower = A_fisher[1,], upper = A_fisher[2,],
+                                   threshold = t_a)
+  B_matrix = get_adjancency_matrix(lower = B_fisher[1,], upper = B_fisher[2,],
+                                   threshold = t_b)
+  
+  return(list(A = A_matrix, B = B_matrix))
+}
+```
+
+
+Below we define some useful functions used to visualize the estimated graphs. We compare the graph with and without the Bonferroni correction and also with the community detection in order to highlight some hidden relations among the features.  
+```{r, warning=FALSE}
+set_graph_params = function(G) {
+  V(G)$size <- .5
+  V(G)$label <- ""
+  E(G)$width = 0.01
+  E(G)$arrow.mode <- 0
+  return(G)
+}
+
+plot_graph = function(M, title, community=F) {
+  G = simplify(graph_from_adjacency_matrix(M, mode="undirected"), remove.loops = T)
+  G = set_graph_params(G)
+  params = list(G, main = title, vertex.color="indianred3", vertex.size=5, vertex.frame.color="ivory1", 
+                vertex.label.cex=0.8, vertex.label.dist=5, edge.curved=0.2)
+  
+  # Plot with community detection
+  if(community) {
+    cfg = cluster_fast_greedy(G)
+    params = append(list(cfg), params)
+  }
+  do.call(plot, params)
+}
+
+plot_comparison_graphs = function(G_bonferroni, G_raw, community=F) {
+  # Plotting graphs
+  par(mfrow = c(2,2), mai=c(.1,.1,.2,.1))
+  graph_list = list(G_bonferroni$A, G_bonferroni$B, G_raw$A, G_raw$B)
+  title_list = c("Group A (Bonferroni)", "Group B (Bonferroni)",
+                 "Group A (non-adjusted)", "Group B (non-adjusted)")
+  invisible(sapply(1:4, function(i) plot_graph(graph_list[[i]], title_list[[i]],community=community)))
+}
+```
+
+
+## Define che correlation matrices 
+In this section we preprocess the data we need in order to apply the methods defined above. Firstly we create the two correlation matrices using the Pearson correlation, then to simplify operations we 'flat' the matrices and we pass them to the `build_graph` to obtain the two types: adjusted and not adjusted.
+```{r test, warning=FALSE}
+# correlation matrices
+A = lapply(asd_sel, function(x) cor(x, method = "pearson"))
+B = lapply(td_sel, function(x) cor(x, method = "pearson"))
+
+# flatted correlation matrices
+A_flat = t(sapply(A, unlist))
+B_flat = t(sapply(B, unlist))
+
+# building adjacency matrix for ASD group
+G_bonferroni = build_graph(A_flat, B_flat)
+G_raw = build_graph(A_flat, B_flat, adjust = F)
+```
+
+## Visualize the estimated graphs
+From the graph it's quite clear that the Bonferroni adjustment is necessary to avoid a huge amount of false discovery (edges).
+```{r graphs, echo=FALSE, warning=FALSE}
+plot_comparison_graphs(G_bonferroni, G_raw)
+plot_comparison_graphs(G_bonferroni, G_raw, community = T)
+```
+
+## Paired correlation between groups
+Until now we tested the correlations within groups with a specific threshold, in the following we look at the number of concomitant correlations above threshold between groups. To do so we first build the individual graphs and then compare their adjacency matrix, a plot of the number of correlations the two groups agree on (i.e. both above threshold) is then plotted.
+```{r th, warning=FALSE}
+# Paired correlation with sliding threshold
+probs = seq(0.5, 1, 0.05)
+n = length(probs)
+n_coact_bonf = rep(NA, n)
+n_coact_raw = rep(NA, n)
+
+for(i in 1:n) {
+  G_bonf = build_graph(A_flat, B_flat, probs = probs[i], adjust = T)
+  G_raw = build_graph(A_flat, B_flat, probs = probs[i], adjust = F)
+  
+  # number of paired correlation between groups
+  n_coact_bonf[i] = sum((G_bonf$A == 1) & (G_bonf$B == 1)) - 116
+  n_coact_raw[i] = sum((G_raw$A == 1) & (G_raw$B == 1)) - 116
+}
+```
+
+
+```{r graph, echo=FALSE}
+par(mfrow = c(1,1), mai=c(1,1,1,1))
+plot(x = probs, y = n_coact_bonf, type = "b", col = "seagreen3", pch = 16, xlab = "Threshold",
+     ylab = "Number of Paired Correlations", ylim = range(n_coact_raw), lwd = 2,
+     main = "Paired correlations at different thresholds")
+lines(x = probs, y = n_coact_raw, type = "b", col = "indianred3", pch = 16, lwd = 2)
+segments(.5, n_coact_bonf[7], 1, n_coact_bonf[7], lwd = 2, lty = 2, col = "lightcyan4")
+text(.8, n_coact_bonf[7] - 150, bquote(q[80]),lwd = 2)
+legend("topright", legend=c("Bonferroni", "Non-Adjusted"),
+       col=c("seagreen3", "indianred3"), lty=1, lwd=3)
+grid()
+```
+
+As we can notice from the plot, when the threshold goes up, the number of edges goes down. That’s reasonable since using higher value of threshold means accepting only a stronger association between the features. To emphasize this, we also show the degree distributions of the difference graph: we can see how it changes even if the the smallest and largest thresholds differ by only 0.3.
+
+```{r boot_plot, warning=FALSE}
+# Difference graph
+A_means = colMeans(atanh(A_flat))
+B_means = colMeans(atanh(B_flat))
+G_delta = tanh(abs(A_means - B_means))
+
+# Plot of differences at different thresholds
+t_range = quantile(G_delta, probs = c(0.85, 0.95), na.rm = T)
+t_diff = seq(t_range[1], t_range[2], length.out = 4)
+adj_matrix = function(t) as.integer(G_delta >= t)
+delta_matrices = t(sapply(t_diff, adj_matrix))
+titles = unlist(lapply(t_diff, function(t) paste(c("t =", round(t,2)), collapse = " ")))
+
+plot_degree_distributions = function(flat_matrices, titles) {
+  colors = c("deeppink", "deepskyblue", "gold2", "orchid")
+  for(i in 1:4) {
+    M = to_matrix(flat_matrices[i,])
+    G = graph_from_adjacency_matrix(M, mode="undirected")
+    deg = degree(G, mode="all")
+    deg.dist = degree.distribution(G, cumulative=T, mode="all")
+    if(i == 1) {
+      plot(x=0:max(deg), y=1-deg.dist, pch=19, type="l", col=colors[i],
+           xlab="Degree", ylab="Cumulative frequency",
+           main="Degree distribution at different thresholds" , lwd=2)
+    }
+    else {
+      lines(x=0:max(deg), y=1-deg.dist,
+            col=colors[i], lwd=2)
+    }
+  }
+  grid()
+  legend("bottomright", legend=titles, col=colors, lty=1, lwd=2)
+}
+
+par(mfrow=c(1,1), mai=c(1,1,1,1))
+plot_degree_distributions(delta_matrices, titles)
+```
+
+
+## Conclusions
+Through the difference graph we can visualize clearly the co-activation differences between the two groups. The graph has been built taking the adjacency matrix of both groups placing an edge where they differ, i.e. a pair of features is strongly correlated in one group and not in the other. What we can see from this graph is that:
+
+- there are a couple of large groups of features on which the two group disagree.
+- in particular this larger cmomunities also show a different behaviour with many connections between features while the rest look more like paths
+- there are plenty of singleton features meaning that any potential (un)correlation between those is seen in both groups
+
+```{r}
+G_diff = abs(G_bonferroni$A - G_bonferroni$B)
+par(mfrow=c(1,1), mai=c(.5,.5,.5,.5))
+plot_graph(G_diff, title = "Difference Graph", community = T)
+```
+
+## Bootstrap
+
+In order to build bootstrap confidence intervals for the correlation difference we sample multiple times subjects in both groups, compute the average correlation (working in the z-scale) and keep track of the difference in absolute value for each pair of features. Finally we build a normal CI and try to gain some insight from the resulting graph at different threshold values. It looks like the 80th percentile captures a few communities which are "highly connected" suggesting their respective features show a marked difference in correlation between the two groups.
+
+```{r}
+b = 300
+
+# point estimate correlation
+cor_a = colMeans(atanh(A_flat))
+cor_b = colMeans(atanh(B_flat))
+
+diff = abs(cor_a - cor_b)
+
+D_boot = matrix(NA, nrow = b, ncol = 116^2)
+n = 12
+
+d = 116
+m = d*(d-1)/2
+alpha = 0.05/m
+
+for(i in 1:b) {
+  idx_a = sample(1:n, n, replace = T)
+  idx_b = sample(1:n, n, replace = T)
+  
+  D_boot[i,] = abs(colMeans(atanh(A_flat[idx_a,])) - colMeans(atanh(B_flat[idx_b,])))
+}
+
+# Normal confidence interval
+ci_normal = matrix(NA, nrow=2, ncol=116^2)
+se = apply(D_boot, MARGIN = 2, sd)
+ci_normal[1,] = tanh(cor_a - qnorm(1-alpha) * se)
+ci_normal[2,] = tanh(cor_a + qnorm(1-alpha) * se)
+
+# Adjacency matrices
+t = tanh(quantile(diff, probs=c(0.5,.6,.7,.8), na.rm=T))
+par(mfrow=c(2,2), mai=c(.1,.1,.3,.1))
+
+for(i in 1:4) {
+  M_diff = get_adjancency_matrix(ci_normal[1,], ci_normal[2,], t[i])
+  plot_graph(M_diff, title = paste("t = ", round(t[i], 2)), community = T)
+}
+```
+
