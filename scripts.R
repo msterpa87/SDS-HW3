@@ -4,7 +4,7 @@ library(matrixStats)
 
 load("hw3_data.RData")
 
-average_cor = function(M) FisherZInv(colMeans(FisherZ(M)))
+average_cor = function(M) tanh(colMeans(atanh(M)))
 to_matrix = function(M_flat) matrix(as.integer(M_flat), nrow=116, byrow=T)
 
 # test for empty intersection of [-t,t] with CI(j,k)
@@ -14,26 +14,33 @@ build_graph = function(A_flat, B_flat, probs = 0.8, adjust = TRUE) {
   # Bonferroni adjusted confidence level
   d = 116
   m = d*(d-1)/2
-  if(adjust) alpha = 1 - 0.05 / m
-  else alpha = 1 - 0.05
+  if(adjust) alpha = 0.05 / m
+  else alpha = 0.05
   
-  # average correlation per group
-  A_means = average_cor(A_flat)
-  B_means = average_cor(B_flat)
+  # average correlation per group working in the z-scale
+  A_means = colMeans(atanh(A_flat))
+  B_means = colMeans(atanh(B_flat))
   
   # thresholds
   t_a = quantile(A_means, probs = probs, names = F, na.rm = T)
   t_b = quantile(B_means, probs = probs, names = F, na.rm = T)
   
-  # Fisher confidence intervals
-  A_fisher = sapply(A_means, function(x) CorCI(x, n = 145, conf.level = alpha))
-  B_fisher = sapply(B_means, function(x) CorCI(x, n = 145, conf.level = alpha))
+  sigma = 1/sqrt(n - 3)
+  q = qnorm(1-alpha)
+  
+  # Asymptotic CI
+  A_fisher = sapply(A_means, function(x) x + c(-1,1) * q * sigma)
+  B_fisher = sapply(B_means, function(x) x + c(-1,1) * q * sigma)
+  
+  # back transform the CI
+  A_fisher = tanh(A_fisher)
+  B_fisher = tanh(B_fisher)
   
   # adjacency matrices
   n = dim(A_fisher)[2]
-  A_matrix = get_adjancency_matrix(lower = A_fisher[2,], upper = A_fisher[3,],
+  A_matrix = get_adjancency_matrix(lower = A_fisher[1,], upper = A_fisher[2,],
                                    threshold = t_a)
-  B_matrix = get_adjancency_matrix(lower = B_fisher[2,], upper = B_fisher[3,],
+  B_matrix = get_adjancency_matrix(lower = B_fisher[1,], upper = B_fisher[2,],
                                    threshold = t_b)
   
   return(list(A = A_matrix, B = B_matrix))
@@ -87,8 +94,8 @@ A = lapply(asd_sel, function(x) cor(x, method = "pearson"))
 B = lapply(td_sel, function(x) cor(x, method = "pearson"))
 
 # flatted correlation matrices
-A_flat = t(sapply(A, unlist))
-B_flat = t(sapply(B, unlist))
+A_flat = t(sapply(A, function(x) unlist(x, use.names = F)))
+B_flat = t(sapply(B, function(x) unlist(x, use.names = F)))
 
 # building adjacency matrix for ASD group
 G_bonferroni = build_graph(A_flat, B_flat)
